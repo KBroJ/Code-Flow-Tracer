@@ -13,6 +13,8 @@ public class ParsedClass {
     private String packageName;
     private String className;
     private ClassType classType;
+    private boolean isInterface;  // 인터페이스 여부
+    private List<String> implementedInterfaces = new ArrayList<>();  // 구현한 인터페이스 목록
     private List<ParsedMethod> methods = new ArrayList<>();
 
     // Getters and Setters
@@ -46,6 +48,26 @@ public class ParsedClass {
 
     public void setClassType(ClassType classType) {
         this.classType = classType;
+    }
+
+    public boolean isInterface() {
+        return isInterface;
+    }
+
+    public void setInterface(boolean isInterface) {
+        this.isInterface = isInterface;
+    }
+
+    public List<String> getImplementedInterfaces() {
+        return implementedInterfaces;
+    }
+
+    public void setImplementedInterfaces(List<String> implementedInterfaces) {
+        this.implementedInterfaces = implementedInterfaces;
+    }
+
+    public void addImplementedInterface(String interfaceName) {
+        this.implementedInterfaces.add(interfaceName);
     }
 
     public List<ParsedMethod> getMethods() {

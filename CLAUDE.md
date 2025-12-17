@@ -59,12 +59,13 @@ com.codeflow/
 ### docs 폴더 구조
 ```
 docs/
-├── PROJECT_PLAN.md   # 프로젝트 기획 (러너스하이)
-├── DESIGN.md         # 전체 설계
-├── USAGE.md          # 사용법
-├── TODO.md           # 할 일 목록
-├── DEV_LOG.md        # 개발 일지
-└── ISSUES.md         # 문제 및 해결 과정
+├── PROJECT_PLAN.md        # 프로젝트 기획 (러너스하이)
+├── DESIGN.md              # 전체 설계
+├── IMPLEMENTATION_GUIDE.md # 구현 상세 가이드 (코드 흐름, 설계 결정)
+├── USAGE.md               # 사용법
+├── TODO.md                # 할 일 목록
+├── DEV_LOG.md             # 개발 일지
+└── ISSUES.md              # 문제 및 해결 과정
 ```
 
 ### 문서 작성 원칙
@@ -160,12 +161,12 @@ java -jar build/libs/code-flow-tracer.jar --help
 - `chore/[설명]`: 빌드, 설정 변경
 
 ### Commit Message Convention
-**Conventional Commits** 명세를 따름
+**Conventional Commits** 명세를 따름 (설명은 한글 사용)
 
 ```
-<type>: <subject>
+<type>: <한글 설명>
 
-[본문 - 선택]
+[본문 - 선택, 한글 가능]
 
 타입:
 - feat: 새 기능
@@ -176,13 +177,13 @@ java -jar build/libs/code-flow-tracer.jar --help
 - chore: 빌드, 설정 변경
 ```
 
-예시: `feat: Add FlowAnalyzer for call flow tracking`
+예시: `feat: FlowAnalyzer 호출 흐름 분석 기능 추가`
 
 ### Pull Request (PR) Process
 - **PR 작성 필수**: 모든 기능은 PR을 통해 `main` 브랜치로 머지
 - **셀프 리뷰 허용**: 혼자 개발하는 프로젝트이므로 셀프 리뷰 후 머지 가능
 - **PR 템플릿 준수**: `.github/PULL_REQUEST_TEMPLATE.md`를 사용하여 변경 사항 요약 작성
-- **PR 제목**: Conventional Commits 형식 사용
+- **PR 제목/본문**: 한글 사용 가능 (예: `feat: FlowAnalyzer 호출 흐름 분석 기능 추가`)
 - **라벨 필수**: PR 작성 시 적절한 라벨 추가 (예: `feature`, `bug`, `docs`, `refactor`)
 - GitHub 이슈 연결: `Closes #[이슈번호]` (선택)
 

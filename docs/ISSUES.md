@@ -80,6 +80,113 @@ import com.codeflow.output.ConsoleOutput;
 - TODO 주석으로 남겨두고, 실제 구현할 때 import 추가
 - IDE의 "Optimize Imports" 기능 활용
 
+### [#002] IntelliJ "Project JDK is not defined" 에러
+
+**발생일**: 2025-12-17
+**상태**: 🟢 해결됨
+
+#### 문제 상황
+IntelliJ에서 프로젝트를 열었을 때 "Project JDK is not defined" 에러 발생
+- 모든 Java 파일에서 빨간 에러 표시
+- 코드 자동완성, 문법 검사 불가
+
+#### 원인 분석
+- `.idea/misc.xml`에 ProjectRootManager 설정 누락
+- Gradle toolchain 미설정으로 IntelliJ가 JDK를 자동 인식하지 못함
+- 시스템에 Java 21 설치되어 있지만 프로젝트와 연결되지 않음
+
+#### 시도한 해결책
+1. `.idea/misc.xml`에 JDK 설정 추가 - ✅ 효과 있음
+2. `build.gradle`에 toolchain 설정 추가 - ✅ 근본적 해결
+
+#### 최종 해결
+
+**1. build.gradle에 toolchain 추가**
+```groovy
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+
+    // IntelliJ에서 자동으로 JDK를 찾도록 toolchain 설정
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+```
+
+**2. Gradle 프로젝트 동기화**
+- IntelliJ에서 Gradle 새로고침 (🔄) 클릭
+- 또는 `File` → `Sync Project with Gradle Files`
+
+#### 배운 점
+- Gradle toolchain 설정으로 IDE가 자동으로 JDK를 찾게 할 수 있음
+- 프로젝트 타겟 버전(17)과 실행 환경(21)은 다를 수 있음
+- 호환성을 위해 최소 요구 버전으로 빌드하는 것이 좋음
+
+### [#003] 인터페이스-구현체 매핑이 Impl 접미사에만 의존
+
+**발생일**: 2025-12-17
+**상태**: 🟢 해결됨
+
+#### 문제 상황
+기존 인터페이스-구현체 매핑 로직이 클래스명 `Impl` 접미사에만 의존
+```java
+// 지원됨
+UserServiceImpl → UserService ✅
+
+// 지원 안 됨
+DefaultUserService → UserService ❌
+UserServiceV2 → UserService ❌
+UserServiceAdapter → UserService ❌
+```
+
+#### 원인 분석
+- 네이밍 컨벤션에만 의존하는 단순한 로직
+- 실제 `implements` 관계를 분석하지 않음
+- 다양한 네이밍 패턴을 가진 레거시 코드에서 매핑 실패
+
+#### 시도한 해결책
+1. `implements` 키워드 기반 매핑 추가 - ✅ 채택
+2. `Impl` 접미사는 fallback으로 유지 - ✅ 채택
+
+#### 최종 해결
+
+**1. ParsedClass에 필드 추가**
+```java
+private boolean isInterface;
+private List<String> implementedInterfaces = new ArrayList<>();
+```
+
+**2. JavaSourceParser에서 implements 정보 추출**
+```java
+// 인터페이스 여부 확인
+parsedClass.setInterface(clazz.isInterface());
+
+// 구현한 인터페이스 목록 추출
+clazz.getImplementedTypes().forEach(implementedType -> {
+    parsedClass.addImplementedInterface(implementedType.getNameAsString());
+});
+```
+
+**3. FlowAnalyzer 매핑 로직 개선**
+```java
+// 1단계: implements 기반 매핑 (가장 정확)
+for (String interfaceName : clazz.getImplementedInterfaces()) {
+    interfaceToImpl.put(interfaceName, clazz.getClassName());
+}
+
+// 2단계: Impl 접미사 기반 매핑 (fallback)
+if (className.endsWith("Impl") && !interfaceToImpl.containsKey(interfaceName)) {
+    interfaceToImpl.put(interfaceName, className);
+}
+```
+
+#### 배운 점
+- 정적 분석에서는 AST 정보를 최대한 활용해야 함
+- 네이밍 컨벤션 기반 추정은 fallback으로만 사용
+- JavaParser의 `getImplementedTypes()`로 정확한 관계 추출 가능
+- 테스트 케이스로 개선 사항 검증 필수
+
 ---
 
 ## 미해결/진행중 문제
