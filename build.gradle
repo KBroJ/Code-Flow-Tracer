@@ -1,0 +1,65 @@
+plugins {
+    id 'java'
+    id 'application'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
+}
+
+group = 'com.codeflow'
+version = '1.0.0-SNAPSHOT'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Java 소스 코드 파싱 (AST)
+    implementation 'com.github.javaparser:javaparser-core:3.25.5'
+    implementation 'com.github.javaparser:javaparser-symbol-solver-core:3.25.5'
+
+    // XML 파싱 (iBatis/MyBatis SQL 매퍼)
+    implementation 'org.jdom:jdom2:2.0.6.1'
+
+    // 엑셀 출력
+    implementation 'org.apache.poi:poi:5.2.5'
+    implementation 'org.apache.poi:poi-ooxml:5.2.5'
+
+    // CLI 파싱
+    implementation 'info.picocli:picocli:4.7.5'
+
+    // 로깅
+    implementation 'org.slf4j:slf4j-api:2.0.9'
+    implementation 'ch.qos.logback:logback-classic:1.4.11'
+
+    // 테스트
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.1'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+application {
+    mainClass = 'com.codeflow.Main'
+}
+
+// Shadow JAR 설정 (단일 실행 파일 생성)
+shadowJar {
+    archiveBaseName.set('code-flow-tracer')
+    archiveClassifier.set('')
+    archiveVersion.set('')
+
+    manifest {
+        attributes 'Main-Class': 'com.codeflow.Main'
+    }
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
+
+// 인코딩 설정
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+}
