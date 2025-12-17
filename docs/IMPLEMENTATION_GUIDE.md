@@ -480,19 +480,49 @@ public void list() {
 실제 런타임에는 `UserServiceImpl`이 실행됩니다.
 정적 분석에서 이를 추적하려면 매핑이 필요합니다.
 
+**매핑 전략 (우선순위)**
+
+| 우선순위 | 방법 | 예시 | 정확도 |
+|---------|------|------|--------|
+| 1 | `implements` 키워드 분석 | `class UserServiceV2 implements UserService` | 매우 높음 |
+| 2 | `Impl` 접미사 추정 (fallback) | `UserServiceImpl` → `UserService` | 보통 |
+
 ```java
 private void buildInterfaceMapping(List<ParsedClass> parsedClasses) {
+    // 1단계: implements 기반 매핑 (가장 정확)
+    for (ParsedClass clazz : parsedClasses) {
+        if (clazz.isInterface()) continue;  // 인터페이스는 스킵
+
+        // 이 클래스가 구현한 인터페이스들에 대해 매핑
+        for (String interfaceName : clazz.getImplementedInterfaces()) {
+            if (!interfaceToImpl.containsKey(interfaceName)) {
+                interfaceToImpl.put(interfaceName, clazz.getClassName());
+                // 예: "UserService" → "UserServiceV2"
+            }
+        }
+    }
+
+    // 2단계: Impl 접미사 기반 매핑 (fallback)
     for (ParsedClass clazz : parsedClasses) {
         String className = clazz.getClassName();
-
-        // "UserServiceImpl" → "UserService" 매핑
         if (className.endsWith("Impl")) {
             String interfaceName = className.substring(0, className.length() - 4);
-            interfaceToImpl.put(interfaceName, className);
-            // 예: "UserService" → "UserServiceImpl"
+            // implements 매핑이 없는 경우에만 추가
+            if (!interfaceToImpl.containsKey(interfaceName)) {
+                interfaceToImpl.put(interfaceName, className);
+            }
         }
     }
 }
+```
+
+**이제 지원되는 패턴**
+```java
+// 모두 지원됨
+class UserServiceImpl implements UserService { }     ✅
+class DefaultUserService implements UserService { }  ✅
+class UserServiceV2 implements UserService { }       ✅
+class UserServiceAdapter implements UserService { }  ✅
 ```
 
 #### 5.2.4 호출 흐름 트리 생성 (재귀)
@@ -767,9 +797,15 @@ public class UserController {
 
 **문제**: 코드상으로는 `UserService`를 호출하지만, 실제 구현은 `UserServiceImpl`에 있음
 
-**해결**: `Impl`로 끝나는 클래스를 찾아서 인터페이스와 매핑
-```
-UserService → UserServiceImpl
+**해결 (2단계 전략)**:
+1. **implements 기반 매핑** (우선): `class UserServiceV2 implements UserService` 관계 분석
+2. **Impl 접미사 매핑** (fallback): `UserServiceImpl` → `UserService` 추정
+
+```java
+// 이제 모두 지원됨
+UserService → UserServiceImpl      (Impl 접미사)
+UserService → DefaultUserService   (implements 분석)
+UserService → UserServiceV2        (implements 분석)
 ```
 
 ### 7.3 왜 순환 참조 방지가 필요한가?

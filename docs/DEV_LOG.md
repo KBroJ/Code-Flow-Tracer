@@ -91,6 +91,37 @@
 
 ---
 
+### Day 2 추가 작업 - 2025-12-17 (화)
+
+#### 오늘 한 일 (추가)
+1. **인터페이스-구현체 매핑 개선**
+   - 기존: `Impl` 접미사에만 의존 → 한계 발견
+   - 개선: `implements` 키워드 기반 매핑 추가
+   - `Impl` 접미사는 fallback으로 유지
+
+2. **ParsedClass 확장**
+   - `isInterface` 필드 추가
+   - `implementedInterfaces` 목록 추가
+
+3. **JavaSourceParser 개선**
+   - `clazz.isInterface()` 정보 추출
+   - `clazz.getImplementedTypes()` 정보 추출
+
+4. **테스트 코드 보강**
+   - `testImplementsBasedMapping()` 테스트 추가
+   - implements 정보 추출 검증
+
+5. **문서 업데이트**
+   - ISSUES.md: #003 문제 기록
+   - IMPLEMENTATION_GUIDE.md: 매핑 전략 업데이트
+
+#### 배운 점
+- 정적 분석은 AST 정보를 최대한 활용해야 정확도가 높아짐
+- 네이밍 컨벤션 기반 추정은 fallback으로만 사용
+- 문제를 발견하면 바로 기록하고 해결하는 것이 중요
+
+---
+
 ## 주간 회고
 
 ### Week 1 회고 (예정)

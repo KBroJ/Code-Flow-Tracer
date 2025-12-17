@@ -201,6 +201,57 @@ class FlowAnalyzerTest {
     }
 
     @Test
+    @DisplayName("implements 기반 인터페이스 매핑 테스트")
+    void testImplementsBasedMapping() throws IOException {
+        // Given
+        List<ParsedClass> parsedClasses = parser.parseProject(samplesPath);
+
+        // 파싱된 클래스에서 implements 정보 확인
+        System.out.println("=== 파싱된 클래스의 implements 정보 ===");
+        for (ParsedClass clazz : parsedClasses) {
+            if (!clazz.getImplementedInterfaces().isEmpty()) {
+                System.out.printf("%s implements %s%n",
+                    clazz.getClassName(),
+                    clazz.getImplementedInterfaces());
+            }
+        }
+
+        // UserServiceImpl이 UserService를 구현하는지 확인
+        boolean foundImplements = false;
+        for (ParsedClass clazz : parsedClasses) {
+            if (clazz.getClassName().equals("UserServiceImpl")) {
+                assertTrue(clazz.getImplementedInterfaces().contains("UserService"),
+                    "UserServiceImpl은 UserService를 구현해야 함");
+                foundImplements = true;
+            }
+        }
+        assertTrue(foundImplements, "UserServiceImpl 클래스가 있어야 함");
+
+        // When
+        FlowResult result = analyzer.analyze(samplesPath, parsedClasses);
+
+        // Then: 분석 결과에서 UserServiceImpl이 정상적으로 매핑되었는지 확인
+        boolean foundServiceImplInFlow = false;
+        for (FlowNode flow : result.getFlows()) {
+            foundServiceImplInFlow = checkForClassName(flow, "UserServiceImpl");
+            if (foundServiceImplInFlow) break;
+        }
+        assertTrue(foundServiceImplInFlow, "분석 결과에 UserServiceImpl이 있어야 함");
+    }
+
+    private boolean checkForClassName(FlowNode node, String className) {
+        if (className.equals(node.getClassName())) {
+            return true;
+        }
+        for (FlowNode child : node.getChildren()) {
+            if (checkForClassName(child, className)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @Test
     @DisplayName("FlowResult 요약 정보 테스트")
     void testFlowResultSummary() throws IOException {
         // Given

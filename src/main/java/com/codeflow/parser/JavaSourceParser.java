@@ -87,6 +87,14 @@ public class JavaSourceParser {
                                      .map(pd -> pd.getNameAsString())
                                      .orElse(""));
 
+        // 인터페이스 여부 확인
+        parsedClass.setInterface(clazz.isInterface());
+
+        // 구현한 인터페이스 목록 추출
+        clazz.getImplementedTypes().forEach(implementedType -> {
+            parsedClass.addImplementedInterface(implementedType.getNameAsString());
+        });
+
         // 클래스 타입 판별 (Controller, Service, DAO 등)
         parsedClass.setClassType(determineClassType(clazz));
 

@@ -123,29 +123,38 @@ public class FlowAnalyzer {
     /**
      * 인터페이스 → 구현체 매핑 생성
      *
-     * 전략:
-     * 1. "Impl"로 끝나는 클래스 → 인터페이스 추정 (UserServiceImpl → UserService)
-     * 2. 같은 이름의 인터페이스가 있으면 매핑
+     * 전략 (우선순위):
+     * 1. implements 키워드 기반 매핑 (가장 정확)
+     *    - class UserServiceV2 implements UserService → UserService → UserServiceV2
+     * 2. "Impl" 접미사 기반 매핑 (fallback)
+     *    - UserServiceImpl → UserService → UserServiceImpl
      */
     private void buildInterfaceMapping(List<ParsedClass> parsedClasses) {
         interfaceToImpl.clear();
 
-        // 모든 클래스명 수집
-        Set<String> allClassNames = new HashSet<>();
+        // 1단계: implements 기반 매핑 (가장 정확)
         for (ParsedClass clazz : parsedClasses) {
-            allClassNames.add(clazz.getClassName());
+            // 인터페이스는 구현체가 아니므로 스킵
+            if (clazz.isInterface()) {
+                continue;
+            }
+
+            // 이 클래스가 구현한 인터페이스들에 대해 매핑
+            for (String interfaceName : clazz.getImplementedInterfaces()) {
+                // 이미 매핑이 있으면 스킵 (첫 번째 구현체 우선)
+                if (!interfaceToImpl.containsKey(interfaceName)) {
+                    interfaceToImpl.put(interfaceName, clazz.getClassName());
+                }
+            }
         }
 
-        // Impl로 끝나는 클래스에서 인터페이스 매핑
+        // 2단계: Impl 접미사 기반 매핑 (fallback, implements 매핑이 없는 경우에만)
         for (ParsedClass clazz : parsedClasses) {
             String className = clazz.getClassName();
             if (className.endsWith("Impl")) {
                 String interfaceName = className.substring(0, className.length() - 4);
-                // 인터페이스가 실제로 존재하는 경우에만 매핑
-                if (allClassNames.contains(interfaceName)) {
-                    interfaceToImpl.put(interfaceName, className);
-                } else {
-                    // 인터페이스가 없어도 Impl 클래스는 매핑 (인터페이스가 외부에 있을 수 있음)
+                // implements 매핑이 없는 경우에만 추가
+                if (!interfaceToImpl.containsKey(interfaceName)) {
                     interfaceToImpl.put(interfaceName, className);
                 }
             }
