@@ -80,6 +80,49 @@ import com.codeflow.output.ConsoleOutput;
 - TODO 주석으로 남겨두고, 실제 구현할 때 import 추가
 - IDE의 "Optimize Imports" 기능 활용
 
+### [#002] IntelliJ "Project JDK is not defined" 에러
+
+**발생일**: 2025-12-17
+**상태**: 🟢 해결됨
+
+#### 문제 상황
+IntelliJ에서 프로젝트를 열었을 때 "Project JDK is not defined" 에러 발생
+- 모든 Java 파일에서 빨간 에러 표시
+- 코드 자동완성, 문법 검사 불가
+
+#### 원인 분석
+- `.idea/misc.xml`에 ProjectRootManager 설정 누락
+- Gradle toolchain 미설정으로 IntelliJ가 JDK를 자동 인식하지 못함
+- 시스템에 Java 21 설치되어 있지만 프로젝트와 연결되지 않음
+
+#### 시도한 해결책
+1. `.idea/misc.xml`에 JDK 설정 추가 - ✅ 효과 있음
+2. `build.gradle`에 toolchain 설정 추가 - ✅ 근본적 해결
+
+#### 최종 해결
+
+**1. build.gradle에 toolchain 추가**
+```groovy
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+
+    // IntelliJ에서 자동으로 JDK를 찾도록 toolchain 설정
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+```
+
+**2. Gradle 프로젝트 동기화**
+- IntelliJ에서 Gradle 새로고침 (🔄) 클릭
+- 또는 `File` → `Sync Project with Gradle Files`
+
+#### 배운 점
+- Gradle toolchain 설정으로 IDE가 자동으로 JDK를 찾게 할 수 있음
+- 프로젝트 타겟 버전(17)과 실행 환경(21)은 다를 수 있음
+- 호환성을 위해 최소 요구 버전으로 빌드하는 것이 좋음
+
 ---
 
 ## 미해결/진행중 문제
