@@ -15,6 +15,7 @@ public class ParsedMethod {
     private String httpMethod;
     private List<MethodCall> methodCalls = new ArrayList<>();
     private List<ParameterInfo> parameters = new ArrayList<>();  // 메서드 파라미터 정보
+    private List<String> sqlIds = new ArrayList<>();  // DAO 메서드에서 호출하는 SQL ID 목록
 
     // Getters and Setters
     public String getMethodName() {
@@ -86,6 +87,27 @@ public class ParsedMethod {
      */
     public boolean hasParameters() {
         return parameters != null && !parameters.isEmpty();
+    }
+
+    public List<String> getSqlIds() {
+        return sqlIds;
+    }
+
+    public void setSqlIds(List<String> sqlIds) {
+        this.sqlIds = sqlIds;
+    }
+
+    public void addSqlId(String sqlId) {
+        if (sqlId != null && !sqlId.isEmpty() && !sqlIds.contains(sqlId)) {
+            this.sqlIds.add(sqlId);
+        }
+    }
+
+    /**
+     * SQL ID가 있는지 확인 (DAO 메서드인지)
+     */
+    public boolean hasSqlIds() {
+        return sqlIds != null && !sqlIds.isEmpty();
     }
 
     /**

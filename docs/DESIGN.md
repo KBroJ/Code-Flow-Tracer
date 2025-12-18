@@ -124,20 +124,44 @@ ParsedClass clazz = parser.parseFile(Path.of("UserController.java"));
 
 ### 3.2 IBatisParser
 
-**역할**: iBatis/MyBatis XML 파일에서 SQL ID와 실제 쿼리 매핑
+**역할**: iBatis/MyBatis XML 파일에서 SQL 정보 추출 및 매핑
 
 **왜 JDOM2를 선택했는가?**
 - 직관적인 API
 - DOM 방식으로 전체 구조 파악 용이
 - 네임스페이스 처리 지원
 
+**지원 형식**:
+- iBatis: `<sqlMap namespace="...">` 루트 요소
+- MyBatis: `<mapper namespace="...">` 루트 요소
+
+**추출 정보**:
+- 파일명, namespace, SQL ID
+- SQL 타입 (SELECT, INSERT, UPDATE, DELETE)
+- 반환타입 (resultClass, resultType, resultMap)
+- 사용 테이블 (FROM, JOIN, INTO, UPDATE 키워드에서 추출)
+- 전체 쿼리 (Excel 출력용)
+
+**DTD 검증 비활성화**:
+```java
+// 폐쇄망 환경 대응 - 외부 DTD 로드 시도 방지
+SAXBuilder builder = new SAXBuilder();
+builder.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+builder.setFeature("http://xml.org/sax/features/external-general-entities", false);
+builder.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+```
+
 ```java
 // 사용 예시
 IBatisParser parser = new IBatisParser();
-Map<String, String> sqlMap = parser.parseFile(Path.of("User_SQL.xml"));
+Map<String, SqlInfo> sqlMap = parser.parseProject(projectPath);
 
 // 결과
-// sqlMap.get("userDAO.selectUserList") → "SELECT USER_ID, USER_NAME FROM TB_USER..."
+SqlInfo info = sqlMap.get("userDAO.selectUserList");
+// info.getFileName() → "User_SQL.xml"
+// info.getType() → SqlType.SELECT
+// info.getTables() → ["TB_USER"]
+// info.getQuery() → "SELECT USER_ID, USER_NAME FROM TB_USER..."
 ```
 
 ### 3.3 FlowAnalyzer
@@ -209,7 +233,21 @@ public class FlowNode {
     ClassType classType;
     String sqlId;            // DAO인 경우 SQL ID
     String sqlQuery;         // 실제 SQL
+    SqlInfo sqlInfo;         // SQL 상세 정보 (파일명, namespace, 타입, 테이블 등)
     List<FlowNode> children; // 호출하는 메서드들
+}
+```
+
+### 4.4 SqlInfo (SQL 상세 정보)
+```java
+public class SqlInfo {
+    String fileName;         // XML 파일명 (User_SQL.xml)
+    String namespace;        // sqlMap/mapper namespace
+    String sqlId;            // SQL ID (selectUserList)
+    SqlType type;            // SELECT, INSERT, UPDATE, DELETE
+    String resultType;       // 반환 타입 (UserVO, HashMap)
+    List<String> tables;     // 사용 테이블 목록 [TB_USER, TB_DEPT]
+    String query;            // 전체 SQL 쿼리 (Excel 출력용)
 }
 ```
 
@@ -244,8 +282,8 @@ public class FlowNode {
 - [x] 기본 파싱 (Controller, Service, DAO)
 - [x] 호출 흐름 연결
 - [x] 콘솔 출력 (트리 형태, ANSI 색상)
-- [ ] iBatis XML 파싱
-- [ ] 엑셀 출력
+- [x] iBatis XML 파싱 (SqlInfo, IBatisParser, DAO-SQL 연결)
+- [x] 엑셀 출력 (요약, API 목록, 호출 흐름 시트)
 - [ ] Swing GUI
 
 ### Phase 2 (향후)

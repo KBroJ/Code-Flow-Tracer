@@ -200,9 +200,57 @@ public class JavaSourceParser {
             String calledMethod = call.getNameAsString();
             String scope = call.getScope().map(Object::toString).orElse("");
             parsedMethod.addMethodCall(new MethodCall(scope, calledMethod));
+
+            // DAO 메서드에서 SQL ID 추출 (iBatis/MyBatis 패턴)
+            String sqlId = extractSqlId(call);
+            if (sqlId != null) {
+                parsedMethod.addSqlId(sqlId);
+            }
         }
 
         return parsedMethod;
+    }
+
+    /**
+     * DAO 메서드 호출에서 SQL ID를 추출합니다.
+     *
+     * 지원하는 패턴:
+     * - list("userDAO.selectUserList", param)
+     * - selectList("userDAO.selectUserList", param)
+     * - select("userDAO.selectUser", userId)
+     * - selectOne("userDAO.selectUser", userId)
+     * - insert("userDAO.insertUser", userVO)
+     * - update("userDAO.updateUser", userVO)
+     * - delete("userDAO.deleteUser", userId)
+     * - getSqlMapClientTemplate().queryForList("sqlId", param)
+     */
+    private String extractSqlId(MethodCallExpr call) {
+        String methodName = call.getNameAsString();
+
+        // iBatis/MyBatis DAO 메서드 패턴
+        List<String> sqlMethods = List.of(
+            "list", "selectList", "queryForList",
+            "select", "selectOne", "queryForObject",
+            "insert",
+            "update",
+            "delete"
+        );
+
+        if (!sqlMethods.contains(methodName)) {
+            return null;
+        }
+
+        // 첫 번째 인자가 SQL ID
+        if (call.getArguments().isEmpty()) {
+            return null;
+        }
+
+        Expression firstArg = call.getArgument(0);
+        if (firstArg instanceof StringLiteralExpr) {
+            return ((StringLiteralExpr) firstArg).getValue();
+        }
+
+        return null;
     }
 
     /**

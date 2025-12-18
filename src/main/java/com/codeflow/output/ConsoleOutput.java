@@ -4,6 +4,7 @@ import com.codeflow.analyzer.FlowNode;
 import com.codeflow.analyzer.FlowResult;
 import com.codeflow.parser.ClassType;
 import com.codeflow.parser.ParameterInfo;
+import com.codeflow.parser.SqlInfo;
 
 import java.io.Console;
 import java.io.PrintStream;
@@ -297,14 +298,15 @@ public class ConsoleOutput {
                 line.append(color("← " + node.getPrimaryInterface(), GRAY));
             }
 
-            // SQL 정보
-            if (node.hasSql() && style == OutputStyle.DETAILED) {
-                line.append("  ");
-                line.append(color("→ SQL: " + node.getSqlId(), PURPLE));
-            }
         }
 
         out.println(line);
+
+        // SQL 정보 출력 (DAO 노드이고, SQL 정보가 있는 경우)
+        if (node.hasSql() && style != OutputStyle.COMPACT) {
+            String sqlPrefix = prefix + (isLast ? TREE_SPACE : TREE_VERTICAL);
+            printSqlInfo(node, sqlPrefix);
+        }
 
         // 자식 노드 출력
         String childPrefix = prefix + (isLast ? TREE_SPACE : TREE_VERTICAL);
@@ -312,6 +314,68 @@ public class ConsoleOutput {
 
         for (int i = 0; i < children.size(); i++) {
             printNode(children.get(i), childPrefix, i == children.size() - 1);
+        }
+    }
+
+    /**
+     * SQL 정보 출력
+     *
+     * 기본 모드:
+     *   → SQL 정보
+     *     | 파일: User_SQL.xml
+     *     | SQL ID: selectUserList
+     *
+     * 상세 모드 (DETAILED):
+     *   → SQL 정보
+     *     | 파일: User_SQL.xml
+     *     | Namespace: userDAO
+     *     | SQL ID: selectUserList
+     *     | 타입: SELECT
+     *     | 반환타입: UserVO
+     *     | 테이블: TB_USER, TB_DEPT
+     */
+    private void printSqlInfo(FlowNode node, String prefix) {
+        SqlInfo sqlInfo = node.getSqlInfo();
+
+        // SQL 정보 헤더
+        out.println(prefix + color("→ SQL 정보", PURPLE));
+
+        if (sqlInfo != null) {
+            // 파일명
+            out.println(prefix + color("  | ", GRAY) + color("파일: ", GRAY) + color(sqlInfo.getFileName(), CYAN));
+
+            if (style == OutputStyle.DETAILED) {
+                // 상세 모드: 모든 정보 표시
+                // Namespace
+                if (sqlInfo.getNamespace() != null) {
+                    out.println(prefix + color("  | ", GRAY) + color("Namespace: ", GRAY) + sqlInfo.getNamespace());
+                }
+
+                // SQL ID
+                out.println(prefix + color("  | ", GRAY) + color("SQL ID: ", GRAY) + color(sqlInfo.getSqlId(), BOLD));
+
+                // 타입
+                if (sqlInfo.getType() != null) {
+                    out.println(prefix + color("  | ", GRAY) + color("타입: ", GRAY) + color(sqlInfo.getType().name(), YELLOW));
+                }
+
+                // 반환타입
+                if (sqlInfo.getResultType() != null) {
+                    out.println(prefix + color("  | ", GRAY) + color("반환타입: ", GRAY) + color(sqlInfo.getResultType(), CYAN));
+                }
+
+                // 테이블
+                String tables = sqlInfo.getTablesAsString();
+                if (!tables.isEmpty()) {
+                    out.println(prefix + color("  | ", GRAY) + color("테이블: ", GRAY) + color(tables, GREEN));
+                }
+            } else {
+                // 기본 모드: 파일명, SQL ID만
+                out.println(prefix + color("  | ", GRAY) + color("SQL ID: ", GRAY) + color(sqlInfo.getSqlId(), BOLD));
+            }
+        } else {
+            // SqlInfo가 없으면 sqlId만 표시
+            out.println(prefix + color("  | ", GRAY) + color("SQL ID: ", GRAY) + color(node.getSqlId(), BOLD));
         }
     }
 
