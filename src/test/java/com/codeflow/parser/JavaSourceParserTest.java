@@ -108,4 +108,79 @@ class JavaSourceParserTest {
             System.out.println(clazz);
         }
     }
+
+    @Test
+    @DisplayName("클래스 레벨 + 메서드 레벨 URL 조합 테스트")
+    void testUrlCombination() throws Exception {
+        Path controllerPath = samplesPath.resolve("UserController.java");
+
+        ParsedClass parsed = parser.parseFile(controllerPath);
+
+        assertNotNull(parsed);
+
+        // 클래스 레벨 @RequestMapping("/user") 확인
+        assertEquals("/user", parsed.getBaseUrlMapping(),
+            "클래스 레벨 URL이 '/user'여야 함");
+
+        // 메서드 레벨 URL 조합 확인
+        System.out.println("\n=== URL 조합 테스트 ===");
+        System.out.println("Base URL: " + parsed.getBaseUrlMapping());
+
+        boolean foundListEndpoint = false;
+        boolean foundDetailEndpoint = false;
+
+        for (ParsedMethod method : parsed.getMethods()) {
+            if (method.isEndpoint()) {
+                System.out.println("  " + method.getMethodName() + " -> " +
+                    method.getHttpMethod() + " " + method.getUrlMapping());
+
+                // /user/list.do 확인
+                if (method.getMethodName().equals("selectUserList")) {
+                    assertEquals("/user/list.do", method.getUrlMapping(),
+                        "URL이 클래스+메서드 조합이어야 함");
+                    assertEquals("GET", method.getHttpMethod());
+                    foundListEndpoint = true;
+                }
+
+                // /user/detail.do 확인
+                if (method.getMethodName().equals("selectUser")) {
+                    assertEquals("/user/detail.do", method.getUrlMapping(),
+                        "URL이 클래스+메서드 조합이어야 함");
+                    foundDetailEndpoint = true;
+                }
+            }
+        }
+
+        assertTrue(foundListEndpoint, "selectUserList 엔드포인트를 찾아야 함");
+        assertTrue(foundDetailEndpoint, "selectUser 엔드포인트를 찾아야 함");
+    }
+
+    @Test
+    @DisplayName("HTTP 메서드 추출 테스트")
+    void testHttpMethodExtraction() throws Exception {
+        Path controllerPath = samplesPath.resolve("UserController.java");
+
+        ParsedClass parsed = parser.parseFile(controllerPath);
+
+        assertNotNull(parsed);
+
+        System.out.println("\n=== HTTP 메서드 추출 테스트 ===");
+
+        int getCount = 0;
+        int postCount = 0;
+
+        for (ParsedMethod method : parsed.getMethods()) {
+            if (method.isEndpoint()) {
+                String httpMethod = method.getHttpMethod();
+                System.out.println("  " + method.getMethodName() + " -> " + httpMethod);
+
+                if ("GET".equals(httpMethod)) getCount++;
+                if ("POST".equals(httpMethod)) postCount++;
+            }
+        }
+
+        // UserController: GET 2개 (list.do, detail.do), POST 3개 (insert, update, delete)
+        assertEquals(2, getCount, "GET 메서드 2개여야 함");
+        assertEquals(3, postCount, "POST 메서드 3개여야 함");
+    }
 }
