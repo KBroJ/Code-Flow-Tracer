@@ -144,6 +144,7 @@
 - [ ] Spring Data JPA 지원
 - [ ] 헥사고날 아키텍처 지원
 - [ ] 시각화 (PlantUML, Mermaid 다이어그램)
+- [ ] 분기 조건 파라미터 추출 (if/switch 조건식에서 gubun 등 추출)
 
 ### 쿼리 튜닝 어드바이저 (Query Tuning Advisor)
 > MVP 완료 후 추가 개발 고려. 프로젝트 투입 시 쿼리 튜닝 업무 지원 목적.

@@ -1,6 +1,6 @@
 # 전체 설계 (Architecture)
 
-> 최종 수정일: 2025-12-18
+> 최종 수정일: 2025-12-19
 
 ## 1. 프로젝트 개요
 
@@ -79,7 +79,9 @@ com.codeflow/
 │   ├── ParsedClass.java      # 파싱된 클래스 정보
 │   ├── ParsedMethod.java     # 파싱된 메서드 정보
 │   ├── MethodCall.java       # 메서드 호출 정보
-│   └── ClassType.java        # 클래스 타입 (Controller, Service, DAO)
+│   ├── ClassType.java        # 클래스 타입 (Controller, Service, DAO)
+│   ├── SqlInfo.java          # SQL 상세 정보 (파일명, namespace, 타입, 테이블, 파라미터)
+│   └── ParameterInfo.java    # 파라미터 정보 (@RequestParam, VO 필드 등)
 │
 ├── analyzer/                 # 호출 흐름 분석
 │   ├── FlowAnalyzer.java     # 메인 분석 엔진
@@ -248,7 +250,67 @@ public class SqlInfo {
     String resultType;       // 반환 타입 (UserVO, HashMap)
     List<String> tables;     // 사용 테이블 목록 [TB_USER, TB_DEPT]
     String query;            // 전체 SQL 쿼리 (Excel 출력용)
+    List<String> sqlParameters; // SQL 파라미터 목록 [userId, deptId]
 }
+```
+
+**SQL 파라미터 자동 추출**:
+- iBatis 형식: `#paramName#` → `paramName`
+- MyBatis 형식: `#{paramName}` → `paramName`
+- MyBatis 객체 형식: `#{obj.property}` → `property`
+
+```java
+// 정규식 패턴
+private static final Pattern IBATIS_PARAM_PATTERN = Pattern.compile("#([a-zA-Z_][a-zA-Z0-9_]*)#");
+private static final Pattern MYBATIS_PARAM_PATTERN = Pattern.compile("#\\{([a-zA-Z_][a-zA-Z0-9_.]*)\\}");
+```
+
+---
+
+## 4.5 ExcelOutput 설계
+
+### 시트 구성
+| 시트 | 용도 | 내용 |
+|------|------|------|
+| 요약 | 전체 현황 | 프로젝트 경로, 분석 시간, 클래스/엔드포인트 통계 |
+| 호출 흐름 | 상세 분석 | 평면 테이블 형식 (레이어별 컬럼 분리) |
+| SQL 목록 | SQL 목록 | 모든 SQL ID, 타입, 테이블, 쿼리 |
+
+### 호출 흐름 시트 컬럼
+```
+No | HTTP | URL | 파라미터 | Controller | Service | DAO | SQL 파일 | SQL ID | 테이블 | 쿼리
+```
+
+### 파라미터 표시 전략
+- **Controller 파라미터**: `@RequestParam`, `@PathVariable`, VO 사용 필드
+- **SQL 파라미터**: `#param#`, `#{param}` 추출
+- **합집합**: Controller + SQL 파라미터를 병합하여 표시
+
+```
+예시: /user/detail.do → DeptDAO.selectDept()
+- Controller 파라미터: userId
+- SQL 파라미터: deptId
+- 표시: userId, deptId
+```
+
+### CLI 옵션
+```bash
+# 기본 경로로 엑셀 생성 (output/code-flow-result.xlsx)
+java -jar code-flow-tracer.jar -p samples --excel
+
+# 사용자 지정 출력 파일
+java -jar code-flow-tracer.jar -p samples -o result.xlsx
+
+# 출력 디렉토리 변경
+java -jar code-flow-tracer.jar -p samples --excel -d exports
+```
+
+### 중복 파일명 처리
+```
+code-flow-result.xlsx (이미 존재)
+→ code-flow-result (1).xlsx
+→ code-flow-result (2).xlsx
+...
 ```
 
 ---
