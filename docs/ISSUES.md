@@ -333,6 +333,183 @@ private boolean isWideChar(char c) {
 
 ---
 
+### Issue #006: Picocli --help 한글 깨짐
+
+**발생일**: 2025-12-18
+**상태**: ✅ 해결
+
+#### 문제 상황
+```bash
+PS C:\> java -jar code-flow-tracer.jar --help
+
+# 출력 (깨짐)
+?덇굅??肄붾뱶 ?먮쫫 遺꾩꽍 ?꾧뎄 - Controller ??Service ??DAO ??SQL 異붿쟻
+      --gui                  GUI 紐⑤뱶濡??ㅽ뻾
+```
+
+- IntelliJ 터미널, Windows PowerShell, CMD 모두 동일하게 발생
+- `-Dfile.encoding=UTF-8` 설정해도 해결 안 됨
+- `chcp 65001`도 효과 없음
+
+#### 원인 분석
+
+**Picocli의 기본 동작**:
+1. Picocli는 `System.out`을 직접 사용
+2. Windows 콘솔 기본 인코딩은 CP949 (한글 Windows) 또는 CP1252
+3. Java는 UTF-8로 한글 바이트를 출력
+4. 콘솔은 CP949로 해석 → 깨짐
+
+**우리가 만든 ConsoleOutput은 왜 괜찮았나?**
+- `new PrintStream(System.out, true, StandardCharsets.UTF_8)` 사용
+- Picocli의 `--help`는 이 스트림을 사용하지 않음
+
+#### 해결 방법
+
+**Picocli 출력 스트림 명시적 설정**:
+```java
+public static void main(String[] args) {
+    // UTF-8 출력 스트림
+    PrintStream UTF8_OUT = new PrintStream(System.out, true, StandardCharsets.UTF_8);
+
+    CommandLine cmd = new CommandLine(new Main());
+    // Picocli도 UTF-8 스트림 사용하도록 설정
+    cmd.setOut(new PrintWriter(UTF8_OUT, true));
+    cmd.setErr(new PrintWriter(UTF8_ERR, true));
+
+    int exitCode = cmd.execute(args);
+    System.exit(exitCode);
+}
+```
+
+**추가 조치 - @Option description 영어화**:
+```java
+// Before (한글 - 깨질 수 있음)
+@Option(names = {"-p", "--path"}, description = "분석할 프로젝트 경로 (필수)")
+
+// After (영어 - 안전)
+@Option(names = {"-p", "--path"}, description = "Project path to analyze (required)")
+```
+
+**분석 결과 출력 (한글) 해결 - 배치 파일에 chcp 추가**:
+```batch
+REM scripts/analyze.bat
+@echo off
+REM UTF-8 콘솔 출력 설정 (한글 깨짐 방지)
+chcp 65001 > nul 2>&1
+
+java -jar build\libs\code-flow-tracer.jar %*
+```
+
+**왜 Java 코드에서 chcp 실행이 안 되나?**
+- `ProcessBuilder`로 `chcp 65001` 실행 시 **자식 프로세스**의 코드 페이지만 변경됨
+- 부모 콘솔(Java가 실행 중인)은 영향 없음
+- 배치 파일에서 실행하면 **같은 콘솔**에서 코드 페이지 변경 → 동작함
+
+#### 최종 해결
+
+| 실행 방법 | 한글 출력 |
+|----------|----------|
+| `scripts\analyze.bat -p samples` | ✅ 정상 |
+| `chcp 65001` 후 `java -jar ...` | ✅ 정상 |
+| `java -jar ...` 직접 실행 | ❌ 깨짐 |
+| `--output result.txt` 파일 저장 | ✅ 정상 |
+
+#### 배운 점
+- 라이브러리가 `System.out`을 직접 사용하면 인코딩 문제 발생 가능
+- 라이브러리 초기화 시 출력 스트림을 명시적으로 설정해야 함
+- CLI 도움말은 영어로 작성하면 인코딩 문제 회피 가능
+- Windows 콘솔 코드 페이지는 **같은 프로세스**에서 변경해야 적용됨
+- 배치 파일 래퍼가 Windows 환경에서 인코딩 문제 해결에 효과적
+
+### Issue #007: 순환참조 오탐 (같은 메서드 다른 경로 호출 시 잘못된 표시)
+
+**발생일**: 2025-12-18
+**상태**: ✅ 해결
+
+#### 문제 상황
+```
+─── 1/7 ────────────────────────────────────────
+[GET] /api/webtoons
+└── [Controller] ContentApiController.getMainWebtoons()
+    ├── [Service] WebtoonService.getFeaturedContent()
+    │   └── [DAO/Repository] ContentRepository.findTop5ByOrderByViewCountDesc()
+    ├── [Service] WebtoonService.getPopularContent()
+    │   └── [DAO/Repository] ContentRepository.findTop5ByOrderByViewCountDesc [순환참조]()  ← 잘못됨!
+    └── [Service] WebtoonService.getTodayContent()
+        └── [DAO/Repository] ContentRepository.findBySerializationDay()
+```
+
+- 같은 Repository 메서드를 다른 Service에서 호출하면 `[순환참조]`로 표시됨
+- 이것은 진짜 순환참조(A→B→A)가 아님
+- 단순히 같은 메서드를 두 번 호출한 것
+
+#### 원인 분석
+
+**기존 로직**:
+```java
+// FlowAnalyzer.java
+private Set<String> visitedMethods = new HashSet<>();  // 전체 분석에서 공유
+
+private FlowNode buildFlowTree(...) {
+    String signature = clazz.getClassName() + "." + method.getMethodName();
+    if (visitedMethods.contains(signature)) {
+        // 이미 방문한 메서드 → [순환참조]로 표시
+        return new FlowNode(..., methodName + " [순환참조]", ...);
+    }
+    visitedMethods.add(signature);
+    // ...
+}
+```
+
+**문제점**:
+- `visitedMethods`가 전체 분석에서 공유됨
+- 경로 A에서 `findTop5`를 방문 → Set에 추가
+- 경로 B에서 `findTop5` 호출 시 이미 Set에 있음 → 순환참조로 오탐
+
+#### 해결 방법
+
+**호출 스택 방식으로 변경**:
+```java
+private FlowNode buildFlowTree(...) {
+    String signature = clazz.getClassName() + "." + method.getMethodName();
+
+    // 현재 호출 스택에 이미 있으면 = 진짜 순환 (A→B→A)
+    if (visitedMethods.contains(signature)) {
+        return new FlowNode(...);  // 라벨 없이 반환 (무한 루프만 방지)
+    }
+
+    visitedMethods.add(signature);  // 스택에 추가
+
+    // ... 자식 노드 탐색 ...
+
+    visitedMethods.remove(signature);  // 탐색 완료 → 스택에서 제거
+
+    return node;
+}
+```
+
+**핵심 변경**:
+- 탐색 완료 후 `visitedMethods.remove(signature)` 추가
+- `visitedMethods`가 "전체 방문 기록"이 아닌 "현재 호출 스택" 역할
+- 다른 경로에서 같은 메서드 호출 가능
+
+#### 결과
+
+**수정 후**:
+```
+├── [Service] WebtoonService.getFeaturedContent()
+│   └── [DAO/Repository] ContentRepository.findTop5ByOrderByViewCountDesc()
+├── [Service] WebtoonService.getPopularContent()
+│   └── [DAO/Repository] ContentRepository.findTop5ByOrderByViewCountDesc()  ← 정상 표시!
+```
+
+#### 배운 점
+- 순환참조 체크는 "전체 방문"이 아닌 "현재 경로(호출 스택)"로 해야 정확
+- 트리 탐색에서 백트래킹 시 상태 복원(remove) 필요
+- 라벨(`[순환참조]`)을 붙이기 전에 실제로 순환인지 확인 필요
+
+---
+
 ## 미해결/진행중 문제
 
 (현재 없음)

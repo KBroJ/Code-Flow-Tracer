@@ -216,22 +216,33 @@ public class FlowAnalyzer {
 
     /**
      * 호출 흐름 트리 생성 (재귀)
+     *
+     * visitedMethods는 "호출 스택" 역할을 함:
+     * - 현재 경로(A→B→C)에서 A를 다시 호출하면 순환 참조
+     * - 다른 경로(A→B, A→C)에서 같은 메서드를 호출하는 건 OK
      */
     private FlowNode buildFlowTree(ParsedClass clazz, ParsedMethod method, int depth) {
-        // 순환 참조 방지
         String signature = clazz.getClassName() + "." + method.getMethodName();
+
+        // 현재 호출 스택에 이미 있으면 = 진짜 순환 참조 (A→B→A)
         if (visitedMethods.contains(signature)) {
-            FlowNode cycleNode = new FlowNode(clazz.getClassName(), method.getMethodName() + " [순환참조]", clazz.getClassType());
+            FlowNode cycleNode = new FlowNode(clazz.getClassName(), method.getMethodName(), clazz.getClassType());
             cycleNode.setDepth(depth);
-            return cycleNode;
+            return cycleNode;  // 라벨 없이 그냥 반환 (무한 루프만 방지)
         }
+
+        // 현재 호출 스택에 추가
         visitedMethods.add(signature);
 
         // 현재 노드 생성
         FlowNode node = new FlowNode(clazz.getClassName(), method.getMethodName(), clazz.getClassType());
         node.setDepth(depth);
         node.setUrlMapping(method.getUrlMapping());
+        node.setClassUrlMapping(clazz.getBaseUrlMapping());      // 클래스 레벨 URL
+        node.setMethodUrlMapping(method.getMethodUrlOnly());     // 메서드 레벨 URL
         node.setHttpMethod(method.getHttpMethod());
+        node.setImplementedInterfaces(clazz.getImplementedInterfaces());  // 구현 인터페이스
+        node.setParameters(method.getParameters());                        // 메서드 파라미터
 
         // DAO인 경우 SQL ID 추출 시도
         if (clazz.getClassType() == ClassType.DAO) {
@@ -240,6 +251,7 @@ public class FlowAnalyzer {
 
         // 최대 깊이 제한 (무한 루프 방지)
         if (depth > 10) {
+            visitedMethods.remove(signature);  // 스택에서 제거
             return node;
         }
 
@@ -250,6 +262,9 @@ public class FlowAnalyzer {
                 node.addChild(childNode);
             }
         }
+
+        // 현재 경로 탐색 완료 → 스택에서 제거 (다른 경로에서 다시 호출 가능)
+        visitedMethods.remove(signature);
 
         return node;
     }
