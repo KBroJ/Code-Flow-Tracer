@@ -356,7 +356,7 @@ code-flow-result.xlsx (이미 존재)
 
 ---
 
-## 7. 제약사항
+## 7. 제약사항 및 한계점
 
 ### 7.1 지원 범위
 - 직접 메서드 호출만 추적
@@ -367,3 +367,91 @@ code-flow-result.xlsx (이미 존재)
 - AOP 프록시 동작
 - 리플렉션 기반 호출
 - 동적 프록시
+
+### 7.3 정적 분석의 한계점
+
+> 이 도구는 **정적 분석** 기반이므로 아래 케이스에서 한계가 있습니다.
+
+#### 분기 조건 파라미터 추출 불가
+
+```java
+// Service 메서드
+public void process(String gubun, String userId, String deptId) {
+    if ("1".equals(gubun)) {
+        userDAO.selectUser(userId);    // SQL: #userId#
+    } else if ("2".equals(gubun)) {
+        deptDAO.selectDept(deptId);    // SQL: #deptId#
+    }
+}
+```
+
+- **현재**: `gubun`이 분기 조건으로 사용된다는 것을 감지하지 못함
+- **추출되는 파라미터**: userId, deptId (SQL 파라미터만)
+- **누락**: gubun (분기 조건 파라미터)
+- **이유**: if/switch 조건식 분석 구현 복잡도 (다양한 패턴 존재)
+
+```java
+// 다양한 분기 패턴 예시 - 모두 감지하기 어려움
+if ("1".equals(gubun)) { ... }           // 단순 비교
+if (gubun != null && gubun.equals(type)) // 복합 조건
+switch (gubun) { case "1": ... }         // switch
+dao = gubun.equals("1") ? dao1 : dao2;   // 삼항 연산자
+if (StringUtils.equals(gubun, "1")) { }  // 유틸리티 메서드
+```
+
+#### 죽은 코드 판별 불가
+
+```java
+public void process(String type) {
+    if (type.equals("A")) {
+        daoA.select();  // 실제로 호출됨
+    }
+    if (false) {
+        daoB.select();  // 죽은 코드 - 절대 실행 안됨
+    }
+}
+```
+
+- **현재**: daoA, daoB 모두 호출 흐름에 포함
+- **이유**: 정적 분석으로는 `if (false)` 같은 명백한 경우만 판별 가능, 런타임 조건은 판별 불가
+
+#### 동적 SQL ID 추출 불가
+
+```java
+// 정적 SQL ID - 추출 가능
+dao.select("userDAO.selectUser", params);
+
+// 동적 SQL ID - 추출 불가
+String sqlId = "userDAO." + methodName;
+dao.select(sqlId, params);
+
+// 상수 기반 - 추출 불가 (상수 추적 미구현)
+dao.select(SQL_ID_CONSTANT, params);
+```
+
+#### 동적 테이블명 추출 불가
+
+```xml
+<!-- 동적 테이블명 - 추출 불가 -->
+SELECT * FROM $tableName$ WHERE ...
+SELECT * FROM ${schemaName}.TB_USER WHERE ...
+```
+
+### 7.4 현재 파라미터 추출 전략
+
+**결정**: Controller 파라미터 + SQL 파라미터 합집합
+
+| 항목 | 추출 여부 | 방식 |
+|------|----------|------|
+| @RequestParam | ✅ | 어노테이션 값 추출 |
+| @PathVariable | ✅ | 어노테이션 값 추출 |
+| VO 사용 필드 | ✅ | getter 호출 분석 (userVO.getUserId() → userId) |
+| Map.get() 키 | ✅ | 문자열 리터럴만 (params.get("key") → key) |
+| SQL #param# | ✅ | 정규식 패턴 매칭 |
+| SQL #{param} | ✅ | 정규식 패턴 매칭 |
+| 분기 조건 파라미터 | ❌ | 미구현 (향후 과제) |
+
+**왜 합집합인가?**
+- API 호출 시 필요한 파라미터 (Controller) + SQL 실행 시 필요한 파라미터 (SQL)
+- 두 정보 모두 산출물 작성에 유용
+- 분기 파라미터 누락은 인정하되, 실용적 범위에서 최대한 추출
