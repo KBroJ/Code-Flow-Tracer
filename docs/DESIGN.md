@@ -1,6 +1,6 @@
 # 전체 설계 (Architecture)
 
-> 최종 수정일: 2025-12-17
+> 최종 수정일: 2025-12-18
 
 ## 1. 프로젝트 개요
 
@@ -242,9 +242,10 @@ public class FlowNode {
 
 ### Phase 1 (MVP, 4주)
 - [x] 기본 파싱 (Controller, Service, DAO)
-- [ ] 호출 흐름 연결
+- [x] 호출 흐름 연결
+- [x] 콘솔 출력 (트리 형태, ANSI 색상)
 - [ ] iBatis XML 파싱
-- [ ] 콘솔/엑셀 출력
+- [ ] 엑셀 출력
 - [ ] Swing GUI
 
 ### Phase 2 (향후)

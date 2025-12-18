@@ -91,6 +91,123 @@
 
 ---
 
+### Day 4 - 2025-12-18 (수)
+
+#### 오늘 한 일
+
+1. **ConsoleOutput 클래스 구현**
+   - 위치: `com.codeflow.output.ConsoleOutput`
+   - FlowResult를 콘솔에 보기 좋게 출력하는 전담 클래스
+
+2. **트리 형태 출력 포맷팅**
+   - 박스 문자 사용 (├── └── │)
+   - 다중 레벨 호출 추적 시각화
+   - Controller → Service → DAO 흐름 명확히 표현
+
+3. **ANSI 색상 지원**
+   - 클래스 타입별 색상: Controller(녹색), Service(파랑), DAO(보라)
+   - HTTP 메서드별 색상: GET(녹색), POST(노랑), DELETE(빨강)
+   - `useColors` 옵션으로 색상 on/off 가능
+
+4. **3가지 출력 스타일 구현**
+   - `COMPACT`: 클래스.메서드만 출력
+   - `NORMAL`: 타입 태그 + URL 매핑 포함
+   - `DETAILED`: SQL ID 등 모든 정보 포함
+
+5. **정적 팩토리 메서드 제공**
+   - `ConsoleOutput.colored()`: 색상 있는 기본 출력
+   - `ConsoleOutput.plain()`: 색상 없는 출력 (파일 저장용)
+   - `ConsoleOutput.detailed()`: 상세 출력
+   - `ConsoleOutput.compact()`: 간략 출력
+
+#### 왜 이렇게 구현했는가?
+
+1. **출력 전담 클래스를 분리한 이유 (SRP)**
+   - 기존: FlowNode/FlowResult에 `toTreeString()` 메서드 존재
+   - 문제: 데이터 클래스가 출력 책임까지 가짐
+   - 해결: 단일 책임 원칙에 따라 출력 로직 분리
+
+2. **ANSI 색상을 사용한 이유**
+   - 가독성 향상: 타입별로 시각적 구분
+   - 터미널 친화적: 대부분의 현대 터미널 지원
+   - 옵션 제공: 파일 출력 시에는 색상 제거 가능
+
+3. **3가지 스타일을 제공한 이유**
+   - 사용 목적에 따라 다른 상세도 필요
+   - COMPACT: 빠른 개요 파악
+   - DETAILED: 디버깅, SQL 추적
+
+#### 배운 점
+
+- Java에서 ANSI escape code 사용법
+- 트리 구조 출력을 위한 재귀 알고리즘
+- PrintStream을 사용한 출력 추상화의 유용성
+
+---
+
+### Day 4 추가 작업 - 2025-12-18 (수)
+
+#### 오늘 한 일 (추가)
+
+1. **Windows 환경 한글 깨짐 문제 해결**
+   - 문제: IntelliJ 콘솔에서 한글이 `��ü Ŭ����:` 처럼 깨짐
+   - 원인: `System.out`이 JVM 기본 인코딩(CP949) 사용
+   - 해결: UTF-8 PrintStream 생성하여 사용
+
+2. **Java 10+ API 활용한 코드 개선**
+   - Before: try-catch로 `UnsupportedEncodingException` 처리 (8줄)
+   - After: `Charset` 직접 전달 + 싱글톤 패턴 (2줄)
+   ```java
+   // Java 10+ API - 예외 처리 불필요
+   private static final PrintStream UTF8_OUT =
+       new PrintStream(System.out, true, StandardCharsets.UTF_8);
+   ```
+
+3. **한글 폭 계산 로직 추가**
+   - 문제: 박스 출력 시 한글 정렬 어긋남
+   - 원인: `String.length()`는 문자 수만 반환, 한글은 2칸 폭
+   - 해결: `getDisplayWidth()`, `isWideChar()` 메서드 추가
+
+4. **배포 스크립트 기본 구조 생성**
+   - `scripts/run.bat`: GUI 모드 실행
+   - `scripts/analyze.bat`: CLI 모드 실행
+   - 향후 jlink 경량 JRE 번들 배포 준비
+
+5. **문서 업데이트**
+   - ISSUES.md: #004 한글 깨짐, #005 박스 정렬 문제 기록
+   - USAGE.md: SI 현장/폐쇄망 환경 설치 가이드 추가
+   - TODO.md: 패키징 로드맵 추가 (jpackage, jlink)
+
+#### 왜 이렇게 구현했는가?
+
+1. **싱글톤 패턴 사용 이유**
+   - `new PrintStream()` 매번 호출 → 객체 생성 비용
+   - `static final`로 한 번만 생성, 재사용
+   - 같은 기능인데 메모리/CPU 절약
+
+2. **Java 10+ API 선택 이유**
+   - 프로젝트 타겟이 Java 17 → Java 10 API 사용 가능
+   - `PrintStream(OutputStream, boolean, Charset)` 생성자는 예외 안 던짐
+   - checked exception 처리 불필요 → 코드 간결화
+
+3. **배포 스크립트 구조 설계**
+   - 번들 JDK 있으면 사용, 없으면 시스템 Java 사용
+   - SI 현장의 기존 Java 환경과 충돌 방지
+
+#### 배운 점
+
+- `System.out`은 플랫폼 인코딩에 의존 → 이식성 문제
+- Java 버전별 API 개선사항 확인의 중요성
+- 싱글톤 패턴으로 불필요한 객체 생성 방지
+- `Character.UnicodeBlock`으로 문자 종류 판별 가능
+
+#### 내일 할 일
+
+- Picocli CLI 연동
+- 명령어 옵션 (--style, --output 등)
+
+---
+
 ### Day 3 - 2025-12-18 (수)
 
 #### 오늘 한 일
@@ -191,7 +308,7 @@
 ## 전체 타임라인
 
 ```
-Week 1: 설계 + 기본 파서 ████████████████░░░░ 80%
+Week 1: 설계 + 기본 파서 ████████████████████ 100%
 Week 2: iBatis + 출력   ░░░░░░░░░░░░░░░░░░░░ 0%
 Week 3: GUI + 테스트    ░░░░░░░░░░░░░░░░░░░░ 0%
 Week 4: 개선 + 회고     ░░░░░░░░░░░░░░░░░░░░ 0%
@@ -203,7 +320,7 @@ Week 4: 개선 + 회고     ░░░░░░░░░░░░░░░░░�
 
 | 지표 | 현재 | 목표 |
 |------|------|------|
-| 구현된 기능 | 4/10 | 10/10 |
+| 구현된 기능 | 5/10 | 10/10 |
 | 테스트 통과율 | 100% | 100% |
-| 문서 완성도 | 75% | 100% |
+| 문서 완성도 | 80% | 100% |
 | 코드 커버리지 | - | 80% |

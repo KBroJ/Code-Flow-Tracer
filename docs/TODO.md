@@ -1,6 +1,6 @@
 # 할 일 목록 (TODO)
 
-> 최종 수정일: 2025-12-17
+> 최종 수정일: 2025-12-18
 
 ## 진행 상태 범례
 - ✅ 완료
@@ -32,10 +32,15 @@
 - [x] URL 패턴 매칭 로직 (UrlMatcher 구현)
 - [x] 분석 결과 데이터 모델 (FlowNode, FlowResult) - Day 2에서 완료
 
-### Day 4-5 ⏳
-- [ ] 콘솔 출력 구현 (ConsoleOutput)
-- [ ] 트리 형태 출력 포맷팅
-- [ ] CLI 통합 테스트
+### Day 4 (2025-12-18) ✅
+- [x] 콘솔 출력 구현 (ConsoleOutput)
+- [x] 트리 형태 출력 포맷팅
+- [x] ANSI 색상 지원
+- [x] 3가지 출력 스타일 (COMPACT, NORMAL, DETAILED)
+
+### Day 5 ⏳
+- [ ] CLI 통합 (Picocli 연동)
+- [ ] 통합 테스트
 
 ---
 
@@ -114,6 +119,11 @@
 - [ ] GitHub Releases
 - [ ] Maven Central 배포
 - [ ] 도커 이미지
+
+### 설치파일/패키징
+- [ ] jpackage로 Windows 설치파일 생성 (.exe, .msi)
+- [ ] jlink로 경량 JRE 번들 생성 (폐쇄망 배포용, ~40MB)
+- [ ] 배치 스크립트 포함 배포 패키지 (Portable JDK + JAR)
 
 ---
 
