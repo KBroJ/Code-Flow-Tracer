@@ -27,3 +27,6 @@ target/
 
 # Test outputs
 test-output/
+
+# Personal study notes (not for git)
+study/

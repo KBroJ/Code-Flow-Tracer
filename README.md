@@ -36,9 +36,10 @@ SI 프로젝트에서 **레거시 코드를 파악하는 것은 매우 시간이
 
 | 기능 | 설명 | 상태 |
 |------|------|------|
-| **호출 흐름 추적** | Controller → Service → DAO → SQL | ✅ 구현중 |
+| **호출 흐름 추적** | Controller → Service → DAO → SQL | ✅ 완료 |
 | **iBatis/MyBatis 파싱** | XML SQL 매퍼에서 쿼리 추출 | ⏳ 예정 |
-| **다양한 출력** | 콘솔, 엑셀, 마크다운 | ⏳ 예정 |
+| **콘솔 출력** | 트리 형태 + ANSI 색상 지원 | ✅ 완료 |
+| **엑셀/마크다운 출력** | 문서화용 출력 형식 | ⏳ 예정 |
 | **Desktop GUI** | Swing 기반, JAR 더블클릭 실행 | ⏳ 예정 |
 | **전자정부프레임워크** | 레거시 SI 환경 특화 지원 | ✅ 지원 |
 
@@ -110,13 +111,16 @@ code-flow-tracer/
 │   ├── TODO.md              # 할 일 목록
 │   ├── DEV_LOG.md           # 개발 일지
 │   └── ISSUES.md            # 문제 해결 기록
+├── scripts/                  # 실행 스크립트
+│   ├── run.bat              # GUI 모드 실행
+│   └── analyze.bat          # CLI 모드 실행
 ├── src/
 │   ├── main/java/com/codeflow/
 │   │   ├── Main.java        # CLI 엔트리포인트
-│   │   ├── parser/          # 소스 코드 파싱
-│   │   ├── analyzer/        # 흐름 분석 (TODO)
-│   │   ├── output/          # 출력 (TODO)
-│   │   └── ui/              # Swing GUI (TODO)
+│   │   ├── parser/          # 소스 코드 파싱 ✅
+│   │   ├── analyzer/        # 흐름 분석 ✅
+│   │   ├── output/          # 출력 (콘솔 ✅, 엑셀 ⏳)
+│   │   └── ui/              # Swing GUI (⏳ 예정)
 │   └── test/java/
 └── samples/                  # 테스트용 샘플 코드
 ```

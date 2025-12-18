@@ -76,10 +76,10 @@ com.codeflow/
 │   ├── FlowNode.java         # 호출 흐름 트리 노드
 │   └── FlowResult.java       # 분석 결과 컨테이너
 │
-├── output/                   # [예정] 결과 출력
-│   ├── ConsoleOutput.java    # 콘솔 출력
-│   ├── ExcelOutput.java      # 엑셀 출력
-│   └── MarkdownOutput.java   # 마크다운 출력
+├── output/                   # [부분완료] 결과 출력
+│   ├── ConsoleOutput.java    # 콘솔 출력 ✅
+│   ├── ExcelOutput.java      # 엑셀 출력 (예정)
+│   └── MarkdownOutput.java   # 마크다운 출력 (예정)
 │
 └── ui/                       # [예정] GUI
     └── MainFrame.java        # Swing GUI
@@ -962,15 +962,21 @@ BUILD SUCCESSFUL
 
 ## 9. 향후 확장
 
-### 9.1 다음 구현 예정 (Week 2)
+### 9.1 구현 완료
+
+| 기능 | 설명 | 완료일 |
+|------|------|--------|
+| **ConsoleOutput** | 콘솔에 트리 형태로 출력, ANSI 색상 지원 | 2025-12-18 |
+
+### 9.2 다음 구현 예정
 
 | 기능 | 설명 |
 |------|------|
+| **Picocli CLI 통합** | 명령줄 옵션 처리 |
 | **IBatisParser** | iBatis XML에서 SQL ID와 쿼리 추출 |
-| **ConsoleOutput** | 콘솔에 트리 형태로 출력 |
 | **ExcelOutput** | Apache POI로 엑셀 파일 생성 |
 
-### 9.2 iBatis 파싱 예정 흐름
+### 9.3 iBatis 파싱 예정 흐름
 
 ```
 User_SQL.xml
@@ -986,7 +992,7 @@ FlowAnalyzer에 주입
 FlowNode.sqlQuery에 실제 SQL 표시
 ```
 
-### 9.3 확장 가능한 구조
+### 9.4 확장 가능한 구조
 
 ```
                     ┌─────────────────┐
@@ -1037,5 +1043,5 @@ Spring Boot, Spring Data JPA 등은 향후 확장 예정입니다.
 ---
 
 > **문서 작성일**: 2025-12-17
-> **최종 수정일**: 2025-12-17
+> **최종 수정일**: 2025-12-18
 > **작성자**: Claude Code (러너스하이 2기 프로젝트)
