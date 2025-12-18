@@ -75,6 +75,12 @@ public class FlowAnalyzer {
 
     /**
      * 특정 URL 패턴에 해당하는 흐름만 분석
+     *
+     * 지원하는 패턴:
+     * - 정확한 매칭: "/user/list.do"
+     * - 와일드카드: "/user/*" 또는 "/user/**"
+     * - PathVariable: "/user/{id}"
+     * - 부분 매칭: "user" (URL에 포함되면 매칭)
      */
     public FlowResult analyzeByUrl(Path projectPath, List<ParsedClass> parsedClasses, String urlPattern) {
         FlowResult fullResult = analyze(projectPath, parsedClasses);
@@ -87,7 +93,8 @@ public class FlowAnalyzer {
         filtered.setDaoCount(fullResult.getDaoCount());
 
         for (FlowNode flow : fullResult.getFlows()) {
-            if (flow.getUrlMapping() != null && flow.getUrlMapping().contains(urlPattern)) {
+            String url = flow.getUrlMapping();
+            if (url != null && UrlMatcher.matches(url, urlPattern)) {
                 filtered.addFlow(flow);
             }
         }

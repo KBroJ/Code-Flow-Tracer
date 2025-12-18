@@ -3,15 +3,33 @@
 
 
 ## 변경 내용
-<!-- 변경된 모듈만 작성해주세요 (변경 없는 항목은 삭제) -->
 <!--
-가능한 모듈:
-- **Parser**: 소스 코드 파싱 관련
-- **Analyzer**: 호출 흐름 분석 관련
-- **Output**: 출력 (Console, Excel, Markdown) 관련
-- **UI**: Swing GUI 관련
-- **Docs**: 문서 관련
-- **Test**: 테스트 관련
+변경된 모듈별로 접이식(details) 형식으로 작성
+- 설명이 먼저, 파일명은 괄호 안에
+- 신규 파일은 (신규) 표시
+- 세부 항목에 커밋 SHA 기준 라인 링크 포함
+-->
+
+### 모듈명
+<!--
+가능한 모듈: parser, analyzer, output, ui, docs, test
+변경 없는 모듈은 삭제
+-->
+
+<!--
+<details>
+<summary>변경 내용 설명 (<code>파일명.java</code>)</summary>
+
+- 세부 변경 내용 ([#L시작-L끝](https://github.com/KBroJ/Code-Flow-Tracer/blob/{커밋SHA}/경로/파일.java#L시작-L끝))
+
+</details>
+
+<details>
+<summary>(신규) 새 기능 설명 (<code>NewFile.java</code>)</summary>
+
+- 세부 변경 내용 ([#L라인](링크))
+
+</details>
 -->
 
 

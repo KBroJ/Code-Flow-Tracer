@@ -16,6 +16,7 @@ public class ParsedClass {
     private boolean isInterface;  // 인터페이스 여부
     private List<String> implementedInterfaces = new ArrayList<>();  // 구현한 인터페이스 목록
     private List<ParsedMethod> methods = new ArrayList<>();
+    private String baseUrlMapping;  // 클래스 레벨 @RequestMapping URL
 
     // Getters and Setters
     public Path getFilePath() {
@@ -80,6 +81,14 @@ public class ParsedClass {
 
     public void addMethod(ParsedMethod method) {
         this.methods.add(method);
+    }
+
+    public String getBaseUrlMapping() {
+        return baseUrlMapping;
+    }
+
+    public void setBaseUrlMapping(String baseUrlMapping) {
+        this.baseUrlMapping = baseUrlMapping;
     }
 
     /**

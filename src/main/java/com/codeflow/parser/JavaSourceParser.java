@@ -6,7 +6,10 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.expr.AnnotationExpr;
+import com.github.javaparser.ast.expr.MemberValuePair;
 import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.NormalAnnotationExpr;
+import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -98,9 +101,13 @@ public class JavaSourceParser {
         // 클래스 타입 판별 (Controller, Service, DAO 등)
         parsedClass.setClassType(determineClassType(clazz));
 
+        // 클래스 레벨 @RequestMapping URL 추출
+        String baseUrl = extractClassLevelUrl(clazz);
+        parsedClass.setBaseUrlMapping(baseUrl);
+
         // 메서드 정보 추출
         for (MethodDeclaration method : clazz.getMethods()) {
-            ParsedMethod parsedMethod = parseMethod(method);
+            ParsedMethod parsedMethod = parseMethod(method, baseUrl);
             parsedClass.addMethod(parsedMethod);
         }
 
@@ -145,9 +152,25 @@ public class JavaSourceParser {
     }
 
     /**
-     * 메서드 정보를 추출합니다.
+     * 클래스 레벨 @RequestMapping URL을 추출합니다.
      */
-    private ParsedMethod parseMethod(MethodDeclaration method) {
+    private String extractClassLevelUrl(ClassOrInterfaceDeclaration clazz) {
+        for (AnnotationExpr annotation : clazz.getAnnotations()) {
+            String annotationName = annotation.getNameAsString();
+            if (annotationName.equals("RequestMapping")) {
+                return extractUrlFromAnnotation(annotation);
+            }
+        }
+        return "";
+    }
+
+    /**
+     * 메서드 정보를 추출합니다.
+     *
+     * @param method 메서드 선언
+     * @param baseUrl 클래스 레벨 URL (있으면 조합)
+     */
+    private ParsedMethod parseMethod(MethodDeclaration method, String baseUrl) {
         ParsedMethod parsedMethod = new ParsedMethod();
         parsedMethod.setMethodName(method.getNameAsString());
         parsedMethod.setReturnType(method.getTypeAsString());
@@ -156,7 +179,10 @@ public class JavaSourceParser {
         for (AnnotationExpr annotation : method.getAnnotations()) {
             String annotationName = annotation.getNameAsString();
             if (annotationName.contains("Mapping")) {
-                parsedMethod.setUrlMapping(extractUrlFromAnnotation(annotation));
+                String methodUrl = extractUrlFromAnnotation(annotation);
+                // 클래스 레벨 URL + 메서드 레벨 URL 조합
+                String fullUrl = combineUrls(baseUrl, methodUrl);
+                parsedMethod.setUrlMapping(fullUrl);
                 parsedMethod.setHttpMethod(extractHttpMethod(annotationName));
             }
         }
@@ -174,10 +200,82 @@ public class JavaSourceParser {
 
     /**
      * 어노테이션에서 URL 경로를 추출합니다.
+     *
+     * 지원하는 어노테이션 형태:
+     * 1. @GetMapping (값 없음) -> ""
+     * 2. @GetMapping("/list.do") -> "/list.do"
+     * 3. @RequestMapping(value = "/list.do") -> "/list.do"
+     * 4. @RequestMapping(path = "/list.do") -> "/list.do"
      */
     private String extractUrlFromAnnotation(AnnotationExpr annotation) {
-        // TODO: 어노테이션 값에서 URL 추출 로직 구현
-        return annotation.toString();
+        // 1. SingleMemberAnnotationExpr: @GetMapping("/list.do")
+        if (annotation instanceof SingleMemberAnnotationExpr) {
+            SingleMemberAnnotationExpr singleMember = (SingleMemberAnnotationExpr) annotation;
+            String value = singleMember.getMemberValue().toString();
+            return cleanUrlValue(value);
+        }
+
+        // 2. NormalAnnotationExpr: @RequestMapping(value = "/list.do", method = GET)
+        if (annotation instanceof NormalAnnotationExpr) {
+            NormalAnnotationExpr normalAnnotation = (NormalAnnotationExpr) annotation;
+            for (MemberValuePair pair : normalAnnotation.getPairs()) {
+                String name = pair.getNameAsString();
+                // value 또는 path 속성에서 URL 추출
+                if (name.equals("value") || name.equals("path")) {
+                    String value = pair.getValue().toString();
+                    return cleanUrlValue(value);
+                }
+            }
+        }
+
+        // 3. MarkerAnnotationExpr: @GetMapping (값 없음)
+        return "";
+    }
+
+    /**
+     * URL 값에서 따옴표 및 불필요한 문자를 제거합니다.
+     */
+    private String cleanUrlValue(String value) {
+        if (value == null || value.isEmpty()) {
+            return "";
+        }
+
+        // 따옴표 제거 ("/list.do" -> /list.do)
+        value = value.replace("\"", "");
+
+        // 배열 형태 처리 ({"/a", "/b"} -> /a)
+        if (value.startsWith("{") && value.endsWith("}")) {
+            value = value.substring(1, value.length() - 1);
+            // 첫 번째 값만 사용
+            if (value.contains(",")) {
+                value = value.split(",")[0].trim();
+            }
+            value = value.replace("\"", "");
+        }
+
+        return value.trim();
+    }
+
+    /**
+     * 클래스 레벨 URL과 메서드 레벨 URL을 조합합니다.
+     *
+     * 예: "/user" + "/list.do" -> "/user/list.do"
+     *     "/user/" + "/list.do" -> "/user/list.do" (중복 슬래시 제거)
+     *     "" + "/list.do" -> "/list.do"
+     */
+    private String combineUrls(String baseUrl, String methodUrl) {
+        if (baseUrl == null || baseUrl.isEmpty()) {
+            return methodUrl;
+        }
+        if (methodUrl == null || methodUrl.isEmpty()) {
+            return baseUrl;
+        }
+
+        // 슬래시 정규화
+        String base = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
+        String method = methodUrl.startsWith("/") ? methodUrl : "/" + methodUrl;
+
+        return base + method;
     }
 
     /**

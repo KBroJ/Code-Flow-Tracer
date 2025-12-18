@@ -91,6 +91,63 @@
 
 ---
 
+### Day 3 - 2025-12-18 (수)
+
+#### 오늘 한 일
+
+1. **@RequestMapping URL 추출 개선**
+   - 문제: 기존 `extractUrlFromAnnotation()`이 URL 값을 추출하지 않고 어노테이션 전체 문자열 반환
+   - 해결: JavaParser의 어노테이션 타입별 처리 구현
+     - `SingleMemberAnnotationExpr`: `@GetMapping("/list.do")`
+     - `NormalAnnotationExpr`: `@RequestMapping(value = "/list.do")`
+     - `MarkerAnnotationExpr`: `@GetMapping` (값 없음)
+
+2. **클래스 레벨 + 메서드 레벨 URL 조합**
+   - 문제: `@RequestMapping("/user")` 클래스 레벨 URL이 무시됨
+   - 해결: `ParsedClass.baseUrlMapping` 필드 추가, `combineUrls()` 메서드로 조합
+   - 결과: `/user` + `/list.do` = `/user/list.do`
+
+3. **URL 패턴 매칭 유틸리티 구현 (UrlMatcher.java)**
+   - 정확한 매칭: `/user/list.do`
+   - 와일드카드: `/user/*`, `/user/**`
+   - PathVariable: `/user/{id}`
+   - 부분 매칭: `user` (URL에 포함되면 매칭)
+
+4. **테스트 코드 보강**
+   - `testUrlCombination()`: 클래스+메서드 URL 조합 검증
+   - `testHttpMethodExtraction()`: HTTP 메서드 추출 검증
+   - `UrlMatcherTest`: 13개 테스트 케이스
+
+#### 왜 이렇게 구현했는가?
+
+1. **어노테이션 타입별 처리가 필요한 이유**
+   - JavaParser는 어노테이션을 3가지 타입으로 구분
+   - 각 타입마다 값 접근 방식이 다름
+   - 레거시 코드는 다양한 스타일이 혼재 → 모두 지원 필요
+
+2. **UrlMatcher를 별도 클래스로 분리한 이유**
+   - 단일 책임 원칙 (SRP): FlowAnalyzer는 흐름 분석에 집중
+   - 재사용성: 향후 다른 곳에서도 URL 매칭 필요할 수 있음
+   - 테스트 용이성: 독립적으로 URL 매칭 로직 테스트 가능
+
+3. **와일드카드 패턴을 정규식으로 변환한 이유**
+   - `*` → `[^/]*` (슬래시 제외)로 1단계만 매칭
+   - `**` → `.*`로 모든 경로 매칭
+   - 단순 문자열 비교보다 유연한 패턴 지원
+
+#### 배운 점
+
+- JavaParser AST에서 어노테이션 값을 추출하는 방법
+- 정규식을 활용한 URL 패턴 매칭 전략
+- 단위 테스트의 중요성 - 13개 테스트로 엣지 케이스 검증
+
+#### 내일 할 일
+
+- ConsoleOutput 구현 (트리 형태 출력)
+- CLI 통합 (Picocli 연동)
+
+---
+
 ### Day 2 추가 작업 - 2025-12-17 (화)
 
 #### 오늘 한 일 (추가)
@@ -134,7 +191,7 @@
 ## 전체 타임라인
 
 ```
-Week 1: 설계 + 기본 파서 ████████████░░░░░░░░ 60%
+Week 1: 설계 + 기본 파서 ████████████████░░░░ 80%
 Week 2: iBatis + 출력   ░░░░░░░░░░░░░░░░░░░░ 0%
 Week 3: GUI + 테스트    ░░░░░░░░░░░░░░░░░░░░ 0%
 Week 4: 개선 + 회고     ░░░░░░░░░░░░░░░░░░░░ 0%
@@ -146,7 +203,7 @@ Week 4: 개선 + 회고     ░░░░░░░░░░░░░░░░░�
 
 | 지표 | 현재 | 목표 |
 |------|------|------|
-| 구현된 기능 | 3/10 | 10/10 |
+| 구현된 기능 | 4/10 | 10/10 |
 | 테스트 통과율 | 100% | 100% |
-| 문서 완성도 | 70% | 100% |
+| 문서 완성도 | 75% | 100% |
 | 코드 커버리지 | - | 80% |

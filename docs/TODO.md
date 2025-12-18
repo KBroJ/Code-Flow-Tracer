@@ -27,10 +27,10 @@
 - [x] 클래스 간 호출 관계 연결 로직
 - [x] 인터페이스 → 구현체 매핑
 
-### Day 3 ⏳
-- [ ] @RequestMapping URL 추출 개선
-- [ ] URL 패턴 매칭 로직
-- [ ] 분석 결과 데이터 모델 (FlowNode, FlowResult)
+### Day 3 (2025-12-18) ✅
+- [x] @RequestMapping URL 추출 개선 (클래스+메서드 레벨 조합)
+- [x] URL 패턴 매칭 로직 (UrlMatcher 구현)
+- [x] 분석 결과 데이터 모델 (FlowNode, FlowResult) - Day 2에서 완료
 
 ### Day 4-5 ⏳
 - [ ] 콘솔 출력 구현 (ConsoleOutput)
