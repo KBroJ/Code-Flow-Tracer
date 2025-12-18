@@ -187,5 +187,35 @@ java -jar build/libs/code-flow-tracer.jar --help
 - **라벨 필수**: PR 작성 시 적절한 라벨 추가 (예: `feature`, `bug`, `docs`, `refactor`)
 - GitHub 이슈 연결: `Closes #[이슈번호]` (선택)
 
+### PR 변경 내용 작성 형식
+
+**접이식(Collapsible) + 커밋 SHA 링크** 형식 사용:
+
+```markdown
+<details>
+<summary>변경 내용 설명 (<code>파일명.java</code>)</summary>
+
+- 세부 변경 1 ([#L시작-L끝](https://github.com/KBroJ/Code-Flow-Tracer/blob/{커밋SHA}/경로/파일.java#L시작-L끝))
+- 세부 변경 2 ([#L라인](링크))
+
+</details>
+```
+
+**규칙:**
+- 설명이 먼저, 파일명은 괄호 안에: `변경 내용 설명 (파일명.java)`
+- 신규 파일은 앞에 `(신규)` 표시: `(신규) 새 기능 설명 (NewFile.java)`
+- 링크는 **커밋 SHA 기준** 사용 (브랜치 삭제 후에도 링크 유지)
+- 세부 변경 항목에 라인 번호 링크 포함
+
+**예시:**
+```markdown
+<details>
+<summary>(신규) URL 패턴 매칭 유틸리티 (<code>UrlMatcher.java</code>)</summary>
+
+- 와일드카드 패턴 매칭 ([#L57-L79](https://github.com/KBroJ/Code-Flow-Tracer/blob/8725f41/src/.../UrlMatcher.java#L57-L79))
+
+</details>
+```
+
 ### AI 도구 사용
 - 커밋 메시지에 자동 생성 문구 제거 (예: "🤖 Generated with Claude Code" 제거)
