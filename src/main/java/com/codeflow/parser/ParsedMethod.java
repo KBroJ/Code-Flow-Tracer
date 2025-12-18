@@ -10,9 +10,11 @@ public class ParsedMethod {
 
     private String methodName;
     private String returnType;
-    private String urlMapping;
+    private String urlMapping;       // 전체 URL (클래스 + 메서드 조합)
+    private String methodUrlOnly;    // 메서드 레벨 URL만 (@GetMapping, @PostMapping 등)
     private String httpMethod;
     private List<MethodCall> methodCalls = new ArrayList<>();
+    private List<ParameterInfo> parameters = new ArrayList<>();  // 메서드 파라미터 정보
 
     // Getters and Setters
     public String getMethodName() {
@@ -39,6 +41,14 @@ public class ParsedMethod {
         this.urlMapping = urlMapping;
     }
 
+    public String getMethodUrlOnly() {
+        return methodUrlOnly;
+    }
+
+    public void setMethodUrlOnly(String methodUrlOnly) {
+        this.methodUrlOnly = methodUrlOnly;
+    }
+
     public String getHttpMethod() {
         return httpMethod;
     }
@@ -57,6 +67,25 @@ public class ParsedMethod {
 
     public void addMethodCall(MethodCall methodCall) {
         this.methodCalls.add(methodCall);
+    }
+
+    public List<ParameterInfo> getParameters() {
+        return parameters;
+    }
+
+    public void setParameters(List<ParameterInfo> parameters) {
+        this.parameters = parameters;
+    }
+
+    public void addParameter(ParameterInfo param) {
+        this.parameters.add(param);
+    }
+
+    /**
+     * 파라미터가 있는지 확인
+     */
+    public boolean hasParameters() {
+        return parameters != null && !parameters.isEmpty();
     }
 
     /**

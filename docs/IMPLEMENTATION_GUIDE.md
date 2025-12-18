@@ -16,6 +16,8 @@
 7. [설계 결정과 이유 (WHY)](#7-설계-결정과-이유-why)
 8. [실제 동작 예시](#8-실제-동작-예시)
 9. [향후 확장](#9-향후-확장)
+10. [CLI (Picocli) 모듈 상세](#10-cli-picocli-모듈-상세)
+11. [파라미터 분석 모듈 상세](#11-파라미터-분석-모듈-상세)
 
 ---
 
@@ -69,6 +71,7 @@ com.codeflow/
 │   ├── ParsedClass.java      # 파싱된 클래스 정보
 │   ├── ParsedMethod.java     # 파싱된 메서드 정보
 │   ├── MethodCall.java       # 메서드 호출 정보
+│   ├── ParameterInfo.java    # 파라미터 정보 (타입, 이름, 사용 필드)
 │   └── ClassType.java        # 클래스 타입 (Controller/Service/DAO)
 │
 ├── analyzer/                 # [완료] 호출 흐름 분석
@@ -967,12 +970,12 @@ BUILD SUCCESSFUL
 | 기능 | 설명 | 완료일 |
 |------|------|--------|
 | **ConsoleOutput** | 콘솔에 트리 형태로 출력, ANSI 색상 지원 | 2025-12-18 |
+| **Picocli CLI** | 명령줄 옵션 처리 (--path, --url, --style, --output) | 2025-12-18 |
 
 ### 9.2 다음 구현 예정
 
 | 기능 | 설명 |
 |------|------|
-| **Picocli CLI 통합** | 명령줄 옵션 처리 |
 | **IBatisParser** | iBatis XML에서 SQL ID와 쿼리 추출 |
 | **ExcelOutput** | Apache POI로 엑셀 파일 생성 |
 
@@ -1011,6 +1014,302 @@ FlowNode.sqlQuery에 실제 SQL 표시
 
 ---
 
+## 10. CLI (Picocli) 모듈 상세
+
+### 10.1 Picocli란?
+
+**Picocli**는 Java에서 CLI(Command Line Interface)를 쉽게 만들어주는 라이브러리입니다.
+
+| 구분 | 직접 구현 | Picocli 사용 |
+|------|----------|-------------|
+| 옵션 파싱 | for문으로 직접 | 어노테이션 |
+| 도움말 | 직접 작성 | 자동 생성 |
+| 필수값 검증 | if문으로 직접 | `required = true` |
+| 타입 변환 | `Integer.parseInt()` | 자동 |
+| 코드량 | 많음 | 적음 |
+
+### 10.2 `--help` 동작 흐름
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  java -jar code-flow-tracer.jar --help                          │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  1. main(String[] args)                                         │
+│     args = ["--help"]                                           │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  2. new CommandLine(new Main())                                 │
+│     - Main 클래스의 @Command, @Option 어노테이션 파싱           │
+│     - 옵션 정보 수집 (-p, -u, -s, -o, --help, --version 등)     │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  3. cmd.setOut(new PrintWriter(UTF8_OUT, true))                 │
+│     - Picocli 출력 스트림을 UTF-8로 설정                        │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  4. cmd.execute(args)                                           │
+│     - args 파싱: "--help" 발견                                  │
+│     - mixinStandardHelpOptions = true 이므로 --help 자동 처리   │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+                    ┌─────────────────┐
+                    │  --help 감지?   │
+                    └─────────────────┘
+                      │           │
+                    Yes          No
+                      │           │
+                      ▼           ▼
+┌──────────────────────────┐  ┌──────────────────────────┐
+│  5a. 도움말 출력          │  │  5b. Main.call() 실행     │
+│  - @Command description   │  │  - 실제 분석 로직 수행    │
+│  - @Option description    │  │                          │
+│  - 자동 포맷팅            │  │                          │
+│  → cmd.getOut()으로 출력  │  │                          │
+└──────────────────────────┘  └──────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  6. return exitCode (0 = 성공)                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**핵심 포인트**: `--help`가 있으면 `call()` 메서드는 실행되지 않고, Picocli가 자동으로 도움말을 출력합니다.
+
+### 10.3 어노테이션 → 도움말 출력 매핑
+
+#### 코드 (Main.java)
+```java
+@Command(
+    name = "code-flow-tracer",                    // ← 프로그램 이름
+    mixinStandardHelpOptions = true,              // ← -h, --help, -V, --version 자동 추가
+    version = "1.0.0",                            // ← --version 출력값
+    description = "Legacy code flow analyzer..." // ← 설명
+)
+public class Main implements Callable<Integer> {
+
+    @Option(names = {"-p", "--path"}, description = "Project path...", required = true)
+    private Path projectPath;
+
+    @Option(names = {"-u", "--url"}, description = "URL pattern filter...")
+    private String urlPattern;
+
+    @Option(names = {"-s", "--style"}, description = "Output style...", defaultValue = "normal")
+    private String style;
+}
+```
+
+#### 출력 (--help)
+```
+Usage: code-flow-tracer [-hV] [--gui] [--no-color] [-o=<outputPath>]
+                        -p=<projectPath> [-s=<style>] [-u=<urlPattern>]
+       ↑                 ↑                 ↑
+       │                 │                 └─ required=true라서 필수 표시
+       │                 └─ 대괄호 [] = 선택 옵션
+       └─ @Command의 name
+
+Legacy code flow analyzer - Controller -> Service -> DAO -> SQL tracing
+↑
+└─ @Command의 description
+
+      --gui                  Run in GUI mode        ← @Option 그대로
+  -h, --help                 Show this help...      ← mixinStandardHelpOptions가 자동 추가
+  -p, --path=<projectPath>   Project path...        ← required=true
+  -s, --style=<style>        Output style...
+  -V, --version              Print version...       ← mixinStandardHelpOptions가 자동 추가
+```
+
+### 10.4 매핑 관계 표
+
+| 어노테이션 | --help 출력 |
+|-----------|-------------|
+| `@Command(name = "...")` | `Usage: code-flow-tracer` |
+| `@Command(description = "...")` | 프로그램 설명 줄 |
+| `@Option(names = {"-p", "--path"})` | `-p, --path=<projectPath>` |
+| `@Option(description = "...")` | 옵션 설명 |
+| `@Option(required = true)` | 대괄호 없음 (필수) |
+| `@Option(defaultValue = "normal")` | 내부적으로 기본값 설정 |
+| `mixinStandardHelpOptions = true` | `-h, --help`, `-V, --version` 자동 추가 |
+
+### 10.5 Windows 한글 깨짐 해결
+
+**문제**: Picocli의 `--help` 출력이 Windows 콘솔에서 한글이 깨짐
+
+**원인**: Picocli가 기본적으로 `System.out`을 사용하고, Windows 콘솔은 UTF-8이 아닌 CP949 사용
+
+**해결**:
+```java
+public static void main(String[] args) {
+    // UTF-8 출력 스트림 생성
+    PrintStream UTF8_OUT = new PrintStream(System.out, true, StandardCharsets.UTF_8);
+
+    CommandLine cmd = new CommandLine(new Main());
+    // Picocli도 UTF-8 스트림 사용하도록 설정
+    cmd.setOut(new PrintWriter(UTF8_OUT, true));
+    cmd.setErr(new PrintWriter(UTF8_ERR, true));
+
+    int exitCode = cmd.execute(args);
+    System.exit(exitCode);
+}
+```
+
+**추가 조치**: `@Option`의 description을 영어로 작성하면 인코딩 문제 회피 가능
+
+### 10.6 전체 파이프라인
+
+```
+사용자 입력 (CLI)
+       │
+       ▼
+┌─────────────────────────────────────────────────────┐
+│  Main.java (Picocli)                                │
+│  - 옵션 파싱: --path, --url, --style, --output     │
+│  - 유효성 검사: 경로 존재 여부 등                    │
+└───────────────────────────┬─────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────┐
+│  JavaSourceParser.parseProject()                    │
+│  - .java 파일 파싱                                  │
+│  - List<ParsedClass> 생성                           │
+└───────────────────────────┬─────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────┐
+│  FlowAnalyzer.analyze() 또는 analyzeByUrl()         │
+│  - 호출 흐름 분석                                   │
+│  - FlowResult 생성                                  │
+└───────────────────────────┬─────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────┐
+│  ConsoleOutput.print()                              │
+│  - 트리 형태로 콘솔 출력                            │
+│  - 또는 파일로 저장 (--output)                      │
+└─────────────────────────────────────────────────────┘
+```
+
+---
+
+## 11. 파라미터 분석 모듈 상세
+
+### 11.1 개요
+
+Controller 메서드의 파라미터를 추출하고, 실제 사용되는 필드/키를 분석하여 표시합니다.
+
+**출력 예시**:
+```
+[POST] /user/insert.do
+Parameters: UserVO userVO
+  └── userVO 사용 필드: userId, name, deptId
+└── [Controller] UserController.insertUser()
+    └── ...
+```
+
+### 11.2 지원하는 파라미터 타입
+
+| 타입 | 분석 방법 | 예시 |
+|------|-----------|------|
+| `@RequestParam` | 어노테이션 값 추출 | `@RequestParam("userId") String id` → `userId` |
+| `@PathVariable` | 어노테이션 값 추출 | `@PathVariable("id") Long id` → `id` |
+| VO/DTO | `getter` 호출 분석 | `userVO.getUserId()` → `userId` |
+| Map | `get("key")` 호출 분석 | `params.get("pageNo")` → `pageNo` |
+
+### 11.3 핵심 클래스
+
+**ParameterInfo.java**:
+```java
+public class ParameterInfo {
+    private String name;           // 파라미터 이름 (예: userVO)
+    private String type;           // 타입 (예: UserVO)
+    private String simpleType;     // 단순 타입 (예: UserVO, Map)
+    private List<String> usedFields;    // 사용된 필드/키
+    private boolean hasRequestParam;    // @RequestParam 여부
+    private boolean hasPathVariable;    // @PathVariable 여부
+
+    // 타입 판별 메서드
+    public boolean isMapType() { ... }
+    public boolean isVoType() { ... }
+    public boolean isSpringInjected() { ... }  // Model, HttpServletRequest 등
+}
+```
+
+### 11.4 파라미터 추출 흐름
+
+```
+┌─────────────────────────────────────────────────────┐
+│  JavaSourceParser.parseMethod()                     │
+│                                                     │
+│  1. method.getParameters() → 파라미터 목록          │
+│  2. 각 파라미터에 대해:                              │
+│     - ParameterInfo 생성 (name, type)              │
+│     - @RequestParam/@PathVariable 확인              │
+│     - VO/Map이면 메서드 바디에서 사용 필드 분석      │
+└───────────────────────────┬─────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────┐
+│  analyzeParameterUsage()                            │
+│                                                     │
+│  Map 타입:                                          │
+│    params.get("userId") → "userId" 추출            │
+│                                                     │
+│  VO 타입:                                           │
+│    userVO.getUserId() → "userId" 추출              │
+│    userVO.getName() → "name" 추출                  │
+└─────────────────────────────────────────────────────┘
+```
+
+### 11.5 Spring 자동 주입 파라미터 필터링
+
+API 문서화에 불필요한 Spring 프레임워크 파라미터는 자동으로 제외됩니다:
+
+```java
+public boolean isSpringInjected() {
+    return simpleType.equals("Model") || simpleType.equals("ModelMap")
+        || simpleType.equals("HttpServletRequest")
+        || simpleType.equals("HttpServletResponse")
+        || simpleType.equals("HttpSession")
+        || simpleType.equals("RedirectAttributes")
+        || simpleType.equals("BindingResult")
+        || simpleType.equals("Principal")
+        // ...
+}
+```
+
+**필터링 대상**:
+- `Model`, `ModelMap`, `ModelAndView` - 뷰에 데이터 전달용
+- `HttpServletRequest`, `HttpServletResponse` - 서블릿 객체
+- `HttpSession` - 세션 객체
+- `RedirectAttributes` - 리다이렉트 시 플래시 속성
+- `BindingResult`, `Errors` - 유효성 검사 결과
+- `Principal`, `Authentication` - 보안 컨텍스트
+
+**필터링 제외 (표시됨)**:
+- `Pageable` - 클라이언트가 `?page=0&size=10` 전송
+- `MultipartFile` - 클라이언트가 파일 업로드
+
+### 11.6 한계점
+
+| 케이스 | 분석 가능 여부 | 설명 |
+|--------|---------------|------|
+| `params.get("userId")` | ✅ 가능 | 문자열 리터럴 |
+| `params.get(KEY_CONST)` | ⚠️ 추적 필요 | 상수 추적 미구현 |
+| `params.get(dynamicKey)` | ❌ 불가능 | 런타임 값 |
+| `userVO.getUserId()` | ✅ 가능 | getter 패턴 |
+| `BeanUtils.copyProperties()` | ❌ 불가능 | 리플렉션 |
+
+---
+
 ## 부록: 자주 묻는 질문 (FAQ)
 
 ### Q1. 왜 런타임 동작을 추적하지 않나요?
@@ -1043,5 +1342,5 @@ Spring Boot, Spring Data JPA 등은 향후 확장 예정입니다.
 ---
 
 > **문서 작성일**: 2025-12-17
-> **최종 수정일**: 2025-12-18
+> **최종 수정일**: 2025-12-18 (파라미터 분석 모듈 추가)
 > **작성자**: Claude Code (러너스하이 2기 프로젝트)

@@ -1,6 +1,7 @@
 package com.codeflow.analyzer;
 
 import com.codeflow.parser.ClassType;
+import com.codeflow.parser.ParameterInfo;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -16,10 +17,14 @@ public class FlowNode {
     private String className;       // 클래스명
     private String methodName;      // 메서드명
     private ClassType classType;    // 클래스 타입 (CONTROLLER, SERVICE, DAO 등)
-    private String urlMapping;      // Controller인 경우 URL 매핑
+    private String urlMapping;      // Controller인 경우 URL 매핑 (전체 URL)
+    private String classUrlMapping; // 클래스 레벨 URL (@RequestMapping on class)
+    private String methodUrlMapping;// 메서드 레벨 URL (@GetMapping, @PostMapping 등)
     private String httpMethod;      // HTTP 메서드 (GET, POST 등)
     private String sqlId;           // DAO인 경우 SQL ID
     private String sqlQuery;        // 실제 SQL 쿼리
+    private List<String> implementedInterfaces = new ArrayList<>();  // 구현한 인터페이스 목록
+    private List<ParameterInfo> parameters = new ArrayList<>();      // 메서드 파라미터 정보
     private int depth;              // 트리 깊이
     private List<FlowNode> children = new ArrayList<>();  // 호출하는 메서드들
 
@@ -65,6 +70,22 @@ public class FlowNode {
         this.urlMapping = urlMapping;
     }
 
+    public String getClassUrlMapping() {
+        return classUrlMapping;
+    }
+
+    public void setClassUrlMapping(String classUrlMapping) {
+        this.classUrlMapping = classUrlMapping;
+    }
+
+    public String getMethodUrlMapping() {
+        return methodUrlMapping;
+    }
+
+    public void setMethodUrlMapping(String methodUrlMapping) {
+        this.methodUrlMapping = methodUrlMapping;
+    }
+
     public String getHttpMethod() {
         return httpMethod;
     }
@@ -87,6 +108,46 @@ public class FlowNode {
 
     public void setSqlQuery(String sqlQuery) {
         this.sqlQuery = sqlQuery;
+    }
+
+    public List<String> getImplementedInterfaces() {
+        return implementedInterfaces;
+    }
+
+    public void setImplementedInterfaces(List<String> implementedInterfaces) {
+        this.implementedInterfaces = implementedInterfaces;
+    }
+
+    /**
+     * 구현한 인터페이스가 있는지 확인
+     */
+    public boolean hasImplementedInterface() {
+        return implementedInterfaces != null && !implementedInterfaces.isEmpty();
+    }
+
+    /**
+     * 첫 번째 구현 인터페이스 반환 (주로 Service 인터페이스)
+     */
+    public String getPrimaryInterface() {
+        if (hasImplementedInterface()) {
+            return implementedInterfaces.get(0);
+        }
+        return null;
+    }
+
+    public List<ParameterInfo> getParameters() {
+        return parameters;
+    }
+
+    public void setParameters(List<ParameterInfo> parameters) {
+        this.parameters = parameters;
+    }
+
+    /**
+     * 파라미터가 있는지 확인
+     */
+    public boolean hasParameters() {
+        return parameters != null && !parameters.isEmpty();
     }
 
     public int getDepth() {

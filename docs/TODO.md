@@ -10,9 +10,10 @@
 
 ---
 
-## Week 1: 설계 + 기본 파서 개발
+## Week 1: 설계 + 기본 파서 개발 ✅
 
-### Day 1 (2025-12-17) ✅
+### 2025-12-17 (화) ✅
+**Session 1: 프로젝트 기획 및 셋업**
 - [x] 프로젝트 기획 및 방향 설정
 - [x] Gradle 프로젝트 생성
 - [x] build.gradle 의존성 설정
@@ -22,80 +23,95 @@
 - [x] 테스트 코드 작성 및 통과
 - [x] 문서화 구조 설정
 
-### Day 2 (2025-12-17) ✅
+**Session 2: FlowAnalyzer 핵심 구현**
 - [x] FlowAnalyzer 설계 및 구현
 - [x] 클래스 간 호출 관계 연결 로직
 - [x] 인터페이스 → 구현체 매핑
 
-### Day 3 (2025-12-18) ✅
+**Session 3: 인터페이스-구현체 매핑 개선**
+- [x] implements 키워드 기반 매핑 추가
+- [x] ParsedClass 확장 (isInterface, implementedInterfaces)
+
+### 2025-12-18 (수) ✅
+**Session 1: URL 추출 및 패턴 매칭**
 - [x] @RequestMapping URL 추출 개선 (클래스+메서드 레벨 조합)
 - [x] URL 패턴 매칭 로직 (UrlMatcher 구현)
-- [x] 분석 결과 데이터 모델 (FlowNode, FlowResult) - Day 2에서 완료
 
-### Day 4 (2025-12-18) ✅
+**Session 2: ConsoleOutput 구현**
 - [x] 콘솔 출력 구현 (ConsoleOutput)
 - [x] 트리 형태 출력 포맷팅
 - [x] ANSI 색상 지원
 - [x] 3가지 출력 스타일 (COMPACT, NORMAL, DETAILED)
+- [x] Windows 한글 깨짐 문제 해결
+- [x] 배포 스크립트 기본 구조 생성
 
-### Day 5 ⏳
-- [ ] CLI 통합 (Picocli 연동)
-- [ ] 통합 테스트
+**Session 3: Picocli CLI 통합**
+- [x] CLI 통합 (Picocli 연동)
+- [x] 통합 테스트
+
+**Session 4: 파라미터 표시 및 순환참조 수정**
+- [x] 파라미터 표시 기능 구현
+  - [x] ParameterInfo 클래스 생성
+  - [x] @RequestParam, @PathVariable 추출
+  - [x] VO getter, Map.get() 분석으로 사용 필드 추출
+  - [x] 간결한 표시 형식 (한 줄 + VO/Map 상세)
+  - [x] Spring 자동 주입 파라미터 필터링 (Model, HttpServletRequest 등)
+- [x] 순환참조 오탐 수정 (호출 스택 방식으로 변경)
 
 ---
 
-## Week 2: iBatis 파싱 + 출력
+## Week 2: iBatis 파싱 + 출력 ⏳
 
-### Day 6-7 ⏳
+### IBatisParser 구현
 - [ ] IBatisParser 구현
 - [ ] iBatis XML 파싱 (sqlMap 형식)
 - [ ] SQL ID → 쿼리 매핑
 
-### Day 8-9 ⏳
+### DAO-SQL 연결
 - [ ] DAO 메서드 → SQL ID 연결
 - [ ] MyBatis XML 지원 (mapper 형식)
 - [ ] 전자정부프레임워크 샘플로 테스트
 
-### Day 10 ⏳
+### ExcelOutput 구현
 - [ ] ExcelOutput 구현 (Apache POI)
 - [ ] 엑셀 템플릿 설계
 - [ ] 시트 구성 (요약, 상세)
 
 ---
 
-## Week 3: GUI + 테스트
+## Week 3: GUI + 테스트 ⏳
 
-### Day 11-13 ⏳
+### Swing GUI
 - [ ] Swing GUI 기본 프레임
 - [ ] 프로젝트 경로 선택 (JFileChooser)
 - [ ] 분석 옵션 UI
 - [ ] 결과 표시 패널 (JTree 또는 JTextArea)
 
-### Day 14 ⏳
+### GUI 연동
 - [ ] GUI ↔ Core 연동
 - [ ] 진행 상태 표시 (ProgressBar)
 - [ ] 결과 저장 기능
 
-### Day 15 ⏳
+### 실제 테스트
 - [ ] egovframe-simple-homepage-template 클론
 - [ ] 실제 전자정부 프로젝트로 통합 테스트
 - [ ] GitHub 저장소 공개
 
 ---
 
-## Week 4: 개선 + 회고
+## Week 4: 개선 + 회고 ⏳
 
-### Day 16-18 ⏳
+### 안정화
 - [ ] 버그 수정 및 안정화
 - [ ] 엣지 케이스 처리
 - [ ] 성능 최적화 (대용량 프로젝트)
 
-### Day 19-20 ⏳
+### 문서화
 - [ ] README 최종 정리
 - [ ] 사용 가이드 영상/GIF 제작
 - [ ] 전체 과정 회고 작성
 
-### Day 21 ⏳
+### 제출
 - [ ] 러너스하이 경력기술서 작성
 - [ ] 최종 점검 및 제출
 
@@ -132,6 +148,7 @@
 | ID | 설명 | 상태 | 해결일 |
 |----|------|------|--------|
 | #1 | 미사용 import로 인한 컴파일 에러 | ✅ 해결 | 2025-12-17 |
+| #7 | 순환참조 오탐 (같은 메서드 다른 경로 호출 시 [순환참조] 표시) | ✅ 해결 | 2025-12-18 |
 
 ---
 

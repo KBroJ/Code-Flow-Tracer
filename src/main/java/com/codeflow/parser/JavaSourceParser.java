@@ -5,11 +5,14 @@ import com.github.javaparser.ParseResult;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.expr.AnnotationExpr;
+import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MemberValuePair;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NormalAnnotationExpr;
 import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
+import com.github.javaparser.ast.expr.StringLiteralExpr;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -183,9 +186,13 @@ public class JavaSourceParser {
                 // 클래스 레벨 URL + 메서드 레벨 URL 조합
                 String fullUrl = combineUrls(baseUrl, methodUrl);
                 parsedMethod.setUrlMapping(fullUrl);
+                parsedMethod.setMethodUrlOnly(methodUrl);  // 원본 메서드 URL 저장
                 parsedMethod.setHttpMethod(extractHttpMethod(annotationName));
             }
         }
+
+        // 메서드 파라미터 추출 및 사용 분석
+        extractParameters(method, parsedMethod);
 
         // 메서드 내 호출되는 다른 메서드들 추출
         List<MethodCallExpr> methodCalls = method.findAll(MethodCallExpr.class);
@@ -196,6 +203,110 @@ public class JavaSourceParser {
         }
 
         return parsedMethod;
+    }
+
+    /**
+     * 메서드 파라미터를 추출하고 사용된 필드/키를 분석합니다.
+     */
+    private void extractParameters(MethodDeclaration method, ParsedMethod parsedMethod) {
+        List<MethodCallExpr> allCalls = method.findAll(MethodCallExpr.class);
+
+        for (Parameter param : method.getParameters()) {
+            ParameterInfo paramInfo = new ParameterInfo(
+                param.getNameAsString(),
+                param.getTypeAsString()
+            );
+
+            // @RequestParam 어노테이션에서 실제 파라미터 이름 추출
+            extractRequestParamAnnotation(param, paramInfo);
+
+            // VO/Map 타입인 경우 메서드 바디에서 사용된 필드/키 분석
+            analyzeParameterUsage(param.getNameAsString(), paramInfo, allCalls);
+
+            parsedMethod.addParameter(paramInfo);
+        }
+    }
+
+    /**
+     * @RequestParam 어노테이션에서 value 속성을 추출합니다.
+     *
+     * 예: @RequestParam("userId") String userId -> usedFields에 "userId" 추가
+     *     @RequestParam(value = "pageNo", defaultValue = "1") int page
+     */
+    private void extractRequestParamAnnotation(Parameter param, ParameterInfo paramInfo) {
+        for (AnnotationExpr annotation : param.getAnnotations()) {
+            String annotationName = annotation.getNameAsString();
+
+            if (annotationName.equals("RequestParam")) {
+                paramInfo.setHasRequestParam(true);
+                String paramName = extractAnnotationValue(annotation);
+                if (paramName != null && !paramName.isEmpty()) {
+                    paramInfo.addUsedField(paramName);
+                }
+            } else if (annotationName.equals("PathVariable")) {
+                paramInfo.setHasPathVariable(true);
+                String paramName = extractAnnotationValue(annotation);
+                if (paramName != null && !paramName.isEmpty()) {
+                    paramInfo.addUsedField(paramName);
+                }
+            }
+        }
+    }
+
+    /**
+     * 어노테이션에서 value 추출
+     */
+    private String extractAnnotationValue(AnnotationExpr annotation) {
+        if (annotation instanceof SingleMemberAnnotationExpr) {
+            SingleMemberAnnotationExpr single = (SingleMemberAnnotationExpr) annotation;
+            return cleanUrlValue(single.getMemberValue().toString());
+        } else if (annotation instanceof NormalAnnotationExpr) {
+            NormalAnnotationExpr normal = (NormalAnnotationExpr) annotation;
+            for (MemberValuePair pair : normal.getPairs()) {
+                if (pair.getNameAsString().equals("value") || pair.getNameAsString().equals("name")) {
+                    return cleanUrlValue(pair.getValue().toString());
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 파라미터가 메서드 바디에서 어떻게 사용되는지 분석합니다.
+     *
+     * VO/DTO 타입: userVO.getName() -> "name" 추출
+     * Map 타입: params.get("userId") -> "userId" 추출
+     */
+    private void analyzeParameterUsage(String paramName, ParameterInfo paramInfo, List<MethodCallExpr> allCalls) {
+        for (MethodCallExpr call : allCalls) {
+            String scope = call.getScope().map(Object::toString).orElse("");
+
+            // 해당 파라미터에 대한 호출인지 확인
+            if (!scope.equals(paramName)) {
+                continue;
+            }
+
+            String methodName = call.getNameAsString();
+
+            if (paramInfo.isMapType()) {
+                // Map.get("key") 패턴 분석
+                if (methodName.equals("get") && !call.getArguments().isEmpty()) {
+                    Expression arg = call.getArgument(0);
+                    if (arg instanceof StringLiteralExpr) {
+                        String key = ((StringLiteralExpr) arg).getValue();
+                        paramInfo.addUsedField(key);
+                    }
+                }
+            } else if (paramInfo.isVoType()) {
+                // VO.getXxx() 패턴 분석
+                if (methodName.startsWith("get") && methodName.length() > 3) {
+                    // getName -> name 으로 변환
+                    String fieldName = methodName.substring(3, 4).toLowerCase()
+                                     + methodName.substring(4);
+                    paramInfo.addUsedField(fieldName);
+                }
+            }
+        }
     }
 
     /**

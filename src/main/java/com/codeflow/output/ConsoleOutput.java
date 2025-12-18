@@ -3,8 +3,11 @@ package com.codeflow.output;
 import com.codeflow.analyzer.FlowNode;
 import com.codeflow.analyzer.FlowResult;
 import com.codeflow.parser.ClassType;
+import com.codeflow.parser.ParameterInfo;
 
+import java.io.Console;
 import java.io.PrintStream;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -146,6 +149,17 @@ public class ConsoleOutput {
         for (int i = 0; i < flows.size(); i++) {
             FlowNode flow = flows.get(i);
             printFlowNumber(i + 1, flows.size());
+
+            // URL 정보를 트리 위에 별도 라인으로 출력
+            if (flow.isEndpoint() && style != OutputStyle.COMPACT) {
+                printUrlInfo(flow);
+            }
+
+            // 파라미터 정보 출력 (DETAILED 스타일)
+            if (flow.hasParameters() && style == OutputStyle.DETAILED) {
+                printParameters(flow);
+            }
+
             printNode(flow, "", true);
             out.println();
         }
@@ -156,6 +170,88 @@ public class ConsoleOutput {
      */
     private void printFlowNumber(int current, int total) {
         out.println(color(String.format("─── %d/%d ", current, total) + repeat("─", 40), GRAY));
+    }
+
+    /**
+     * URL 정보 출력 (전체 URL 표시)
+     */
+    private void printUrlInfo(FlowNode node) {
+        StringBuilder line = new StringBuilder();
+
+        // HTTP 메서드 + 전체 URL
+        line.append(color("[" + node.getHttpMethod() + "]", httpMethodColor(node.getHttpMethod())));
+        line.append(" ");
+        line.append(color(node.getUrlMapping(), CYAN));
+
+        out.println(line);
+    }
+
+    /**
+     * 파라미터 정보 출력 (간결한 형식)
+     *
+     * 기본: Parameters: Long modelId, LocalDate startDate, ...
+     * VO/Map 사용 필드가 있으면 아래에 상세 표시
+     * Spring 자동 주입 파라미터(Model, HttpServletRequest 등)는 제외
+     */
+    private void printParameters(FlowNode node) {
+        // Spring 자동 주입 파라미터 제외
+        List<ParameterInfo> params = node.getParameters().stream()
+            .filter(p -> !p.isSpringInjected())
+            .toList();
+
+        // 표시할 파라미터가 없으면 생략
+        if (params.isEmpty()) {
+            return;
+        }
+
+        // 파라미터 목록 한 줄로 표시
+        StringBuilder paramLine = new StringBuilder();
+        paramLine.append(color("Parameters: ", GRAY));
+
+        for (int i = 0; i < params.size(); i++) {
+            ParameterInfo param = params.get(i);
+            paramLine.append(color(param.getType(), CYAN));
+            paramLine.append(" ");
+            paramLine.append(color(param.getName(), BOLD));
+
+            if (i < params.size() - 1) {
+                paramLine.append(color(", ", GRAY));
+            }
+        }
+        out.println(paramLine);
+
+        // VO/Map 타입 중 사용 필드가 있는 경우만 상세 표시
+        for (ParameterInfo param : params) {
+            if (param.hasUsedFields() && !param.isRequestParameter()) {
+                StringBuilder fieldsLine = new StringBuilder();
+                fieldsLine.append("  ");
+                fieldsLine.append(color(TREE_LAST, GRAY));
+                fieldsLine.append(color(param.getName(), BOLD));
+
+                if (param.isMapType()) {
+                    fieldsLine.append(color(" 사용 키: ", GRAY));
+                } else {
+                    fieldsLine.append(color(" 사용 필드: ", GRAY));
+                }
+
+                fieldsLine.append(color(String.join(", ", param.getUsedFields()), YELLOW));
+                out.println(fieldsLine);
+            }
+        }
+    }
+
+    /**
+     * URL 분리 정보 포맷 (클래스 URL + 메서드 URL)
+     * 예: (/user + /list.do)
+     */
+    private String formatUrlBreakdown(FlowNode node) {
+        String classUrl = node.getClassUrlMapping();
+        String methodUrl = node.getMethodUrlMapping();
+
+        if (classUrl != null && !classUrl.isEmpty() && methodUrl != null && !methodUrl.isEmpty()) {
+            return color("(" + classUrl + " + " + methodUrl + ")", GRAY);
+        }
+        return "";
     }
 
     /**
@@ -179,12 +275,26 @@ public class ConsoleOutput {
 
         // 추가 정보 (스타일에 따라)
         if (style != OutputStyle.COMPACT) {
-            // URL 매핑
             if (node.isEndpoint()) {
+                if (node.getDepth() == 0) {
+                    // 루트 Controller: URL 분리 정보만 표시 (/user + /list.do)
+                    String breakdown = formatUrlBreakdown(node);
+                    if (!breakdown.isEmpty()) {
+                        line.append("  ").append(breakdown);
+                    }
+                } else {
+                    // 중첩된 Controller 호출: 전체 URL 표시
+                    line.append("  ");
+                    line.append(color("[" + node.getHttpMethod() + "]", httpMethodColor(node.getHttpMethod())));
+                    line.append(" ");
+                    line.append(color(node.getUrlMapping(), CYAN));
+                }
+            }
+
+            // 구현 인터페이스 정보 (← InterfaceName)
+            if (node.hasImplementedInterface()) {
                 line.append("  ");
-                line.append(color("[" + node.getHttpMethod() + "]", httpMethodColor(node.getHttpMethod())));
-                line.append(" ");
-                line.append(color(node.getUrlMapping(), CYAN));
+                line.append(color("← " + node.getPrimaryInterface(), GRAY));
             }
 
             // SQL 정보
@@ -354,41 +464,79 @@ public class ConsoleOutput {
     }
 
     // ─────────────────────────────────────────────────────
+    // 스마트 인코딩 감지
+    // ─────────────────────────────────────────────────────
+
+    /**
+     * 콘솔 인코딩을 자동 감지하여 최적의 PrintStream 반환 (Java 17+)
+     *
+     * 동작 방식:
+     * 1. System.console()이 null인 경우 (IDE, 파이프 출력)
+     *    → UTF-8 사용 (대부분의 IDE가 UTF-8 사용)
+     *
+     * 2. System.console()이 있는 경우 (실제 터미널)
+     *    → Console.charset() 사용 (터미널의 실제 인코딩)
+     *    → Windows CMD: CP949 (한글), Linux/Mac: UTF-8
+     */
+    private static PrintStream getSmartOutputStream() {
+        Console console = System.console();
+
+        if (console == null) {
+            // IDE (IntelliJ, VS Code) 또는 파이프 출력
+            // → 대부분 UTF-8을 사용하므로 UTF-8 선택
+            return new PrintStream(System.out, true, StandardCharsets.UTF_8);
+        }
+
+        // 실제 터미널에서 실행 중
+        // → Console.charset()으로 터미널 인코딩 감지 (Java 17+)
+        Charset consoleCharset = console.charset();
+        return new PrintStream(System.out, true, consoleCharset);
+    }
+
+    /**
+     * 감지된 콘솔 인코딩 정보 반환 (디버깅용)
+     */
+    public static String getDetectedEncoding() {
+        Console console = System.console();
+        if (console == null) {
+            return "UTF-8 (IDE/파이프 모드)";
+        }
+        return console.charset().name() + " (터미널 감지)";
+    }
+
+    // ─────────────────────────────────────────────────────
     // 정적 팩토리 메서드
     // ─────────────────────────────────────────────────────
 
     /**
-     * UTF-8 PrintStream 싱글톤 (Java 10+)
-     * Windows 환경에서도 한글이 정상 출력되도록 함
-     */
-    private static final PrintStream UTF8_OUT =
-        new PrintStream(System.out, true, StandardCharsets.UTF_8);
-
-    /**
      * 색상 있는 기본 출력기 생성
+     * 콘솔 인코딩 자동 감지
      */
     public static ConsoleOutput colored() {
-        return new ConsoleOutput(UTF8_OUT, true, OutputStyle.NORMAL);
+        return new ConsoleOutput(getSmartOutputStream(), true, OutputStyle.NORMAL);
     }
 
     /**
-     * 색상 없는 기본 출력기 생성 (파일 출력용)
+     * 색상 없는 기본 출력기 생성
+     * 콘솔 인코딩 자동 감지
      */
     public static ConsoleOutput plain() {
-        return new ConsoleOutput(UTF8_OUT, false, OutputStyle.NORMAL);
+        return new ConsoleOutput(getSmartOutputStream(), false, OutputStyle.NORMAL);
     }
 
     /**
      * 상세 출력기 생성
+     * 콘솔 인코딩 자동 감지
      */
     public static ConsoleOutput detailed() {
-        return new ConsoleOutput(UTF8_OUT, true, OutputStyle.DETAILED);
+        return new ConsoleOutput(getSmartOutputStream(), true, OutputStyle.DETAILED);
     }
 
     /**
      * 간략 출력기 생성
+     * 콘솔 인코딩 자동 감지
      */
     public static ConsoleOutput compact() {
-        return new ConsoleOutput(UTF8_OUT, true, OutputStyle.COMPACT);
+        return new ConsoleOutput(getSmartOutputStream(), true, OutputStyle.COMPACT);
     }
 }
