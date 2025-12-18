@@ -154,6 +154,46 @@ code-flow-tracer/
 
 ---
 
+## 기존 도구와의 차이점
+
+### IntelliJ Call Hierarchy와 비교
+
+"IntelliJ에 이미 Call Hierarchy 기능이 있지 않나요?" → 맞습니다. 하지만 **목적이 다릅니다.**
+
+| 구분 | IntelliJ Call Hierarchy | Code Flow Tracer |
+|------|------------------------|------------------|
+| **탐색 방식** | 메서드 하나씩 수동 클릭 | URL 패턴으로 전체 흐름 자동 |
+| **인터페이스→구현체** | Ctrl+Alt+B로 수동 이동 | 자동 매핑 |
+| **URL→Controller** | 직접 연결 안 됨 | `/api/user/*` → Controller 자동 |
+| **DAO→SQL** | XML 파일 수동 검색 | iBatis/MyBatis 자동 연결 |
+| **결과 출력** | 화면에서만 확인 | 엑셀, 마크다운 문서화 |
+| **일괄 분석** | ❌ 하나씩만 | ✅ 프로젝트 전체 |
+| **폐쇄망** | IDE 설치 필요 | JAR 하나로 실행 |
+
+**핵심 차이:**
+- IntelliJ = **개발 중 탐색 도구** (한 메서드씩 수동)
+- Code Flow Tracer = **분석/문서화 자동화** (전체 API 일괄)
+
+### 유사 도구 비교
+
+| 도구 | 특징 | Code Flow Tracer와 차이 |
+|------|------|------------------------|
+| [java-callgraph](https://github.com/gousiosg/java-callgraph) | 정적 콜그래프 생성 | 범용 콜그래프, 웹 계층 흐름 없음 |
+| [Sourcetrail](https://www.sourcetrail.com/) | 코드 시각화 (2021 중단) | 범용 시각화, SQL 연동 없음 |
+| [JArchitect](https://www.jarchitect.com/) | 코드 품질 분석 (상용) | 메트릭 중심, 흐름 추적 아님 |
+| [SonarQube](https://www.sonarqube.org/) | 코드 품질/보안 | 품질 분석, 호출 흐름 없음 |
+| [Understand](https://scitools.com/) | 정적 분석 (상용) | 범용 분석, 웹 계층 특화 아님 |
+| [Eclipse CallGraph](https://marketplace.eclipse.org/content/callgraph-viewer) | Eclipse 플러그인 | Eclipse 전용, 문서화 없음 |
+
+**Code Flow Tracer만의 특징:**
+- ✅ **웹 애플리케이션 특화**: URL → Controller → Service → DAO → SQL 전체 흐름
+- ✅ **iBatis/MyBatis 연동**: DAO에서 SQL 쿼리까지 추적
+- ✅ **문서화 출력**: 엑셀, 마크다운으로 인수인계 자료 생성
+- ✅ **전자정부프레임워크 최적화**: 국내 SI 환경 특화
+- ✅ **폐쇄망 지원**: 단일 JAR, 외부 의존성 없음
+
+---
+
 ## 지원 환경
 
 ### 분석 가능한 프로젝트
@@ -168,20 +208,3 @@ Java 1.4 ~ 21 모두 지원 (도구 실행은 Java 17+ 필요)
 - iBatis (sqlMap XML)
 - MyBatis (mapper XML)
 
----
-
-## 기여
-
-이슈와 PR을 환영합니다!
-
----
-
-## 라이선스
-
-MIT License
-
----
-
-## 연락처
-
-- GitHub Issues: [이슈 등록](../../issues)
