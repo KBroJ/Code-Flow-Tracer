@@ -28,5 +28,9 @@ target/
 # Test outputs
 test-output/
 
+# Generated outputs
+output/
+result_output/
+
 # Personal study notes (not for git)
 study/

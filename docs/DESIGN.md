@@ -1,6 +1,6 @@
 # 전체 설계 (Architecture)
 
-> 최종 수정일: 2025-12-18
+> 최종 수정일: 2025-12-19
 
 ## 1. 프로젝트 개요
 
@@ -79,7 +79,9 @@ com.codeflow/
 │   ├── ParsedClass.java      # 파싱된 클래스 정보
 │   ├── ParsedMethod.java     # 파싱된 메서드 정보
 │   ├── MethodCall.java       # 메서드 호출 정보
-│   └── ClassType.java        # 클래스 타입 (Controller, Service, DAO)
+│   ├── ClassType.java        # 클래스 타입 (Controller, Service, DAO)
+│   ├── SqlInfo.java          # SQL 상세 정보 (파일명, namespace, 타입, 테이블, 파라미터)
+│   └── ParameterInfo.java    # 파라미터 정보 (@RequestParam, VO 필드 등)
 │
 ├── analyzer/                 # 호출 흐름 분석
 │   ├── FlowAnalyzer.java     # 메인 분석 엔진
@@ -124,20 +126,44 @@ ParsedClass clazz = parser.parseFile(Path.of("UserController.java"));
 
 ### 3.2 IBatisParser
 
-**역할**: iBatis/MyBatis XML 파일에서 SQL ID와 실제 쿼리 매핑
+**역할**: iBatis/MyBatis XML 파일에서 SQL 정보 추출 및 매핑
 
 **왜 JDOM2를 선택했는가?**
 - 직관적인 API
 - DOM 방식으로 전체 구조 파악 용이
 - 네임스페이스 처리 지원
 
+**지원 형식**:
+- iBatis: `<sqlMap namespace="...">` 루트 요소
+- MyBatis: `<mapper namespace="...">` 루트 요소
+
+**추출 정보**:
+- 파일명, namespace, SQL ID
+- SQL 타입 (SELECT, INSERT, UPDATE, DELETE)
+- 반환타입 (resultClass, resultType, resultMap)
+- 사용 테이블 (FROM, JOIN, INTO, UPDATE 키워드에서 추출)
+- 전체 쿼리 (Excel 출력용)
+
+**DTD 검증 비활성화**:
+```java
+// 폐쇄망 환경 대응 - 외부 DTD 로드 시도 방지
+SAXBuilder builder = new SAXBuilder();
+builder.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+builder.setFeature("http://xml.org/sax/features/external-general-entities", false);
+builder.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+```
+
 ```java
 // 사용 예시
 IBatisParser parser = new IBatisParser();
-Map<String, String> sqlMap = parser.parseFile(Path.of("User_SQL.xml"));
+Map<String, SqlInfo> sqlMap = parser.parseProject(projectPath);
 
 // 결과
-// sqlMap.get("userDAO.selectUserList") → "SELECT USER_ID, USER_NAME FROM TB_USER..."
+SqlInfo info = sqlMap.get("userDAO.selectUserList");
+// info.getFileName() → "User_SQL.xml"
+// info.getType() → SqlType.SELECT
+// info.getTables() → ["TB_USER"]
+// info.getQuery() → "SELECT USER_ID, USER_NAME FROM TB_USER..."
 ```
 
 ### 3.3 FlowAnalyzer
@@ -209,8 +235,82 @@ public class FlowNode {
     ClassType classType;
     String sqlId;            // DAO인 경우 SQL ID
     String sqlQuery;         // 실제 SQL
+    SqlInfo sqlInfo;         // SQL 상세 정보 (파일명, namespace, 타입, 테이블 등)
     List<FlowNode> children; // 호출하는 메서드들
 }
+```
+
+### 4.4 SqlInfo (SQL 상세 정보)
+```java
+public class SqlInfo {
+    String fileName;         // XML 파일명 (User_SQL.xml)
+    String namespace;        // sqlMap/mapper namespace
+    String sqlId;            // SQL ID (selectUserList)
+    SqlType type;            // SELECT, INSERT, UPDATE, DELETE
+    String resultType;       // 반환 타입 (UserVO, HashMap)
+    List<String> tables;     // 사용 테이블 목록 [TB_USER, TB_DEPT]
+    String query;            // 전체 SQL 쿼리 (Excel 출력용)
+    List<String> sqlParameters; // SQL 파라미터 목록 [userId, deptId]
+}
+```
+
+**SQL 파라미터 자동 추출**:
+- iBatis 형식: `#paramName#` → `paramName`
+- MyBatis 형식: `#{paramName}` → `paramName`
+- MyBatis 객체 형식: `#{obj.property}` → `property`
+
+```java
+// 정규식 패턴
+private static final Pattern IBATIS_PARAM_PATTERN = Pattern.compile("#([a-zA-Z_][a-zA-Z0-9_]*)#");
+private static final Pattern MYBATIS_PARAM_PATTERN = Pattern.compile("#\\{([a-zA-Z_][a-zA-Z0-9_.]*)\\}");
+```
+
+---
+
+## 4.5 ExcelOutput 설계
+
+### 시트 구성
+| 시트 | 용도 | 내용 |
+|------|------|------|
+| 요약 | 전체 현황 | 프로젝트 경로, 분석 시간, 클래스/엔드포인트 통계 |
+| 호출 흐름 | 상세 분석 | 평면 테이블 형식 (레이어별 컬럼 분리) |
+| SQL 목록 | SQL 목록 | 모든 SQL ID, 타입, 테이블, 쿼리 |
+
+### 호출 흐름 시트 컬럼
+```
+No | HTTP | URL | 파라미터 | Controller | Service | DAO | SQL 파일 | SQL ID | 테이블 | 쿼리
+```
+
+### 파라미터 표시 전략
+- **Controller 파라미터**: `@RequestParam`, `@PathVariable`, VO 사용 필드
+- **SQL 파라미터**: `#param#`, `#{param}` 추출
+- **합집합**: Controller + SQL 파라미터를 병합하여 표시
+
+```
+예시: /user/detail.do → DeptDAO.selectDept()
+- Controller 파라미터: userId
+- SQL 파라미터: deptId
+- 표시: userId, deptId
+```
+
+### CLI 옵션
+```bash
+# 기본 경로로 엑셀 생성 (output/code-flow-result.xlsx)
+java -jar code-flow-tracer.jar -p samples --excel
+
+# 사용자 지정 출력 파일
+java -jar code-flow-tracer.jar -p samples -o result.xlsx
+
+# 출력 디렉토리 변경
+java -jar code-flow-tracer.jar -p samples --excel -d exports
+```
+
+### 중복 파일명 처리
+```
+code-flow-result.xlsx (이미 존재)
+→ code-flow-result (1).xlsx
+→ code-flow-result (2).xlsx
+...
 ```
 
 ---
@@ -244,8 +344,8 @@ public class FlowNode {
 - [x] 기본 파싱 (Controller, Service, DAO)
 - [x] 호출 흐름 연결
 - [x] 콘솔 출력 (트리 형태, ANSI 색상)
-- [ ] iBatis XML 파싱
-- [ ] 엑셀 출력
+- [x] iBatis XML 파싱 (SqlInfo, IBatisParser, DAO-SQL 연결)
+- [x] 엑셀 출력 (요약, API 목록, 호출 흐름 시트)
 - [ ] Swing GUI
 
 ### Phase 2 (향후)
@@ -256,7 +356,7 @@ public class FlowNode {
 
 ---
 
-## 7. 제약사항
+## 7. 제약사항 및 한계점
 
 ### 7.1 지원 범위
 - 직접 메서드 호출만 추적
@@ -267,3 +367,91 @@ public class FlowNode {
 - AOP 프록시 동작
 - 리플렉션 기반 호출
 - 동적 프록시
+
+### 7.3 정적 분석의 한계점
+
+> 이 도구는 **정적 분석** 기반이므로 아래 케이스에서 한계가 있습니다.
+
+#### 분기 조건 파라미터 추출 불가
+
+```java
+// Service 메서드
+public void process(String gubun, String userId, String deptId) {
+    if ("1".equals(gubun)) {
+        userDAO.selectUser(userId);    // SQL: #userId#
+    } else if ("2".equals(gubun)) {
+        deptDAO.selectDept(deptId);    // SQL: #deptId#
+    }
+}
+```
+
+- **현재**: `gubun`이 분기 조건으로 사용된다는 것을 감지하지 못함
+- **추출되는 파라미터**: userId, deptId (SQL 파라미터만)
+- **누락**: gubun (분기 조건 파라미터)
+- **이유**: if/switch 조건식 분석 구현 복잡도 (다양한 패턴 존재)
+
+```java
+// 다양한 분기 패턴 예시 - 모두 감지하기 어려움
+if ("1".equals(gubun)) { ... }           // 단순 비교
+if (gubun != null && gubun.equals(type)) // 복합 조건
+switch (gubun) { case "1": ... }         // switch
+dao = gubun.equals("1") ? dao1 : dao2;   // 삼항 연산자
+if (StringUtils.equals(gubun, "1")) { }  // 유틸리티 메서드
+```
+
+#### 죽은 코드 판별 불가
+
+```java
+public void process(String type) {
+    if (type.equals("A")) {
+        daoA.select();  // 실제로 호출됨
+    }
+    if (false) {
+        daoB.select();  // 죽은 코드 - 절대 실행 안됨
+    }
+}
+```
+
+- **현재**: daoA, daoB 모두 호출 흐름에 포함
+- **이유**: 정적 분석으로는 `if (false)` 같은 명백한 경우만 판별 가능, 런타임 조건은 판별 불가
+
+#### 동적 SQL ID 추출 불가
+
+```java
+// 정적 SQL ID - 추출 가능
+dao.select("userDAO.selectUser", params);
+
+// 동적 SQL ID - 추출 불가
+String sqlId = "userDAO." + methodName;
+dao.select(sqlId, params);
+
+// 상수 기반 - 추출 불가 (상수 추적 미구현)
+dao.select(SQL_ID_CONSTANT, params);
+```
+
+#### 동적 테이블명 추출 불가
+
+```xml
+<!-- 동적 테이블명 - 추출 불가 -->
+SELECT * FROM $tableName$ WHERE ...
+SELECT * FROM ${schemaName}.TB_USER WHERE ...
+```
+
+### 7.4 현재 파라미터 추출 전략
+
+**결정**: Controller 파라미터 + SQL 파라미터 합집합
+
+| 항목 | 추출 여부 | 방식 |
+|------|----------|------|
+| @RequestParam | ✅ | 어노테이션 값 추출 |
+| @PathVariable | ✅ | 어노테이션 값 추출 |
+| VO 사용 필드 | ✅ | getter 호출 분석 (userVO.getUserId() → userId) |
+| Map.get() 키 | ✅ | 문자열 리터럴만 (params.get("key") → key) |
+| SQL #param# | ✅ | 정규식 패턴 매칭 |
+| SQL #{param} | ✅ | 정규식 패턴 매칭 |
+| 분기 조건 파라미터 | ❌ | 미구현 (향후 과제) |
+
+**왜 합집합인가?**
+- API 호출 시 필요한 파라미터 (Controller) + SQL 실행 시 필요한 파라미터 (SQL)
+- 두 정보 모두 산출물 작성에 유용
+- 분기 파라미터 누락은 인정하되, 실용적 범위에서 최대한 추출

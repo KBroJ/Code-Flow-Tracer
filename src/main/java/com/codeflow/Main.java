@@ -4,8 +4,11 @@ import com.codeflow.analyzer.FlowAnalyzer;
 import com.codeflow.analyzer.FlowResult;
 import com.codeflow.output.ConsoleOutput;
 import com.codeflow.output.ConsoleOutput.OutputStyle;
+import com.codeflow.output.ExcelOutput;
+import com.codeflow.parser.IBatisParser;
 import com.codeflow.parser.JavaSourceParser;
 import com.codeflow.parser.ParsedClass;
+import com.codeflow.parser.SqlInfo;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -19,7 +22,9 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
 
 /**
@@ -40,6 +45,10 @@ import java.util.concurrent.Callable;
 )
 public class Main implements Callable<Integer> {
 
+    // 기본 출력 설정
+    private static final String DEFAULT_OUTPUT_DIR = "output";
+    private static final String DEFAULT_EXCEL_FILENAME = "code-flow-result.xlsx";
+
     @Option(names = {"-p", "--path"}, description = "분석할 프로젝트 경로 (필수)", required = true)
     private Path projectPath;
 
@@ -49,14 +58,20 @@ public class Main implements Callable<Integer> {
     @Option(names = {"-s", "--style"}, description = "출력 스타일: compact, normal, detailed (기본: normal)", defaultValue = "normal")
     private String style;
 
-    @Option(names = {"-o", "--output"}, description = "결과를 파일로 저장 (예: result.txt)")
+    @Option(names = {"-o", "--output"}, description = "결과를 파일로 저장 (예: result.xlsx). 미지정 시 output/code-flow-result.xlsx")
     private Path outputPath;
+
+    @Option(names = {"-d", "--output-dir"}, description = "엑셀 저장 디렉토리 (기본: output)")
+    private Path outputDir;
 
     @Option(names = {"--no-color"}, description = "색상 출력 비활성화")
     private boolean noColor;
 
     @Option(names = {"--gui"}, description = "GUI 모드로 실행")
     private boolean guiMode;
+
+    @Option(names = {"--excel"}, description = "엑셀 파일로 저장 (기본 경로: output/code-flow-result.xlsx)")
+    private boolean excelOutput;
 
     public static void main(String[] args) {
         // 스마트 인코딩 감지로 출력 스트림 설정
@@ -130,8 +145,13 @@ public class Main implements Callable<Integer> {
         JavaSourceParser parser = new JavaSourceParser();
         List<ParsedClass> parsedClasses = parser.parseProject(projectPath);
 
-        // 2. 호출 흐름 분석
+        // 2. iBatis/MyBatis XML 파싱
+        IBatisParser ibatisParser = new IBatisParser();
+        Map<String, SqlInfo> sqlInfoMap = ibatisParser.parseProject(projectPath);
+
+        // 3. 호출 흐름 분석
         FlowAnalyzer analyzer = new FlowAnalyzer();
+        analyzer.setSqlInfoMap(sqlInfoMap);  // SQL 정보 연동
 
         FlowResult result;
         if (urlPattern != null && !urlPattern.isEmpty()) {
@@ -152,23 +172,50 @@ public class Main implements Callable<Integer> {
         // 출력 스타일 결정
         OutputStyle outputStyle = parseOutputStyle(style);
 
-        // 출력 대상 결정 (콘솔 또는 파일)
-        if (outputPath != null) {
-            // 상위 디렉토리 생성
-            if (outputPath.getParent() != null) {
-                Files.createDirectories(outputPath.getParent());
+        // 엑셀 출력 모드 확인 (--excel 옵션 또는 -o로 xlsx 파일 지정)
+        boolean isExcelMode = excelOutput ||
+            (outputPath != null && outputPath.getFileName().toString().toLowerCase().endsWith(".xlsx"));
+
+        // 출력 대상 결정
+        if (outputPath != null || isExcelMode) {
+            Path finalOutputPath;
+
+            if (outputPath != null) {
+                finalOutputPath = outputPath;
+            } else {
+                // 기본 경로 설정 (--excel만 사용한 경우)
+                Path baseDir = outputDir != null ? outputDir : Paths.get(DEFAULT_OUTPUT_DIR);
+                finalOutputPath = baseDir.resolve(DEFAULT_EXCEL_FILENAME);
             }
 
-            // 파일 출력 (색상 없이)
-            try (PrintStream fileOut = new PrintStream(
-                    new FileOutputStream(outputPath.toFile()),
-                    true,
-                    StandardCharsets.UTF_8)) {
+            // 상위 디렉토리 생성
+            if (finalOutputPath.getParent() != null) {
+                Files.createDirectories(finalOutputPath.getParent());
+            }
 
-                ConsoleOutput output = new ConsoleOutput(fileOut, false, outputStyle);
-                output.print(result);
+            String fileName = finalOutputPath.getFileName().toString().toLowerCase();
 
-                System.out.println("결과가 저장되었습니다: " + outputPath);
+            // 엑셀 출력 (.xlsx)
+            if (fileName.endsWith(".xlsx")) {
+                // 중복 파일 처리
+                finalOutputPath = resolveUniqueFilePath(finalOutputPath);
+
+                ExcelOutput excelOutputHandler = new ExcelOutput();
+                excelOutputHandler.export(result, finalOutputPath);
+                System.out.println("엑셀 파일이 저장되었습니다: " + finalOutputPath);
+            }
+            // 텍스트 파일 출력
+            else {
+                try (PrintStream fileOut = new PrintStream(
+                        new FileOutputStream(finalOutputPath.toFile()),
+                        true,
+                        StandardCharsets.UTF_8)) {
+
+                    ConsoleOutput output = new ConsoleOutput(fileOut, false, outputStyle);
+                    output.print(result);
+
+                    System.out.println("결과가 저장되었습니다: " + finalOutputPath);
+                }
             }
         } else {
             // 콘솔 출력
@@ -192,6 +239,41 @@ public class Main implements Callable<Integer> {
             }
 
             output.print(result);
+        }
+    }
+
+    /**
+     * 파일이 이미 존재하면 (1), (2) 등을 붙여 고유한 파일 경로 반환
+     */
+    private Path resolveUniqueFilePath(Path path) {
+        if (!Files.exists(path)) {
+            return path;
+        }
+
+        String fileName = path.getFileName().toString();
+        String baseName;
+        String extension;
+
+        int dotIndex = fileName.lastIndexOf('.');
+        if (dotIndex > 0) {
+            baseName = fileName.substring(0, dotIndex);
+            extension = fileName.substring(dotIndex);
+        } else {
+            baseName = fileName;
+            extension = "";
+        }
+
+        Path parentDir = path.getParent();
+        int counter = 1;
+
+        while (true) {
+            String newFileName = baseName + " (" + counter + ")" + extension;
+            Path newPath = parentDir != null ? parentDir.resolve(newFileName) : Paths.get(newFileName);
+
+            if (!Files.exists(newPath)) {
+                return newPath;
+            }
+            counter++;
         }
     }
 

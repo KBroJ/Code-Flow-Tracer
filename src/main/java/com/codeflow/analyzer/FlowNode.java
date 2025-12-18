@@ -2,6 +2,7 @@ package com.codeflow.analyzer;
 
 import com.codeflow.parser.ClassType;
 import com.codeflow.parser.ParameterInfo;
+import com.codeflow.parser.SqlInfo;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -17,12 +18,14 @@ public class FlowNode {
     private String className;       // 클래스명
     private String methodName;      // 메서드명
     private ClassType classType;    // 클래스 타입 (CONTROLLER, SERVICE, DAO 등)
+    private String filePath;        // 소스 파일 경로 (엑셀 출력용)
     private String urlMapping;      // Controller인 경우 URL 매핑 (전체 URL)
     private String classUrlMapping; // 클래스 레벨 URL (@RequestMapping on class)
     private String methodUrlMapping;// 메서드 레벨 URL (@GetMapping, @PostMapping 등)
     private String httpMethod;      // HTTP 메서드 (GET, POST 등)
     private String sqlId;           // DAO인 경우 SQL ID
     private String sqlQuery;        // 실제 SQL 쿼리
+    private SqlInfo sqlInfo;        // SQL 상세 정보 (파일명, namespace, 타입, 테이블 등)
     private List<String> implementedInterfaces = new ArrayList<>();  // 구현한 인터페이스 목록
     private List<ParameterInfo> parameters = new ArrayList<>();      // 메서드 파라미터 정보
     private int depth;              // 트리 깊이
@@ -60,6 +63,28 @@ public class FlowNode {
 
     public void setClassType(ClassType classType) {
         this.classType = classType;
+    }
+
+    public String getFilePath() {
+        return filePath;
+    }
+
+    public void setFilePath(String filePath) {
+        this.filePath = filePath;
+    }
+
+    /**
+     * 파일명만 반환 (경로 제외)
+     */
+    public String getFileName() {
+        if (filePath == null || filePath.isEmpty()) {
+            return className + ".java";
+        }
+        int lastSep = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
+        if (lastSep >= 0) {
+            return filePath.substring(lastSep + 1);
+        }
+        return filePath;
     }
 
     public String getUrlMapping() {
@@ -108,6 +133,25 @@ public class FlowNode {
 
     public void setSqlQuery(String sqlQuery) {
         this.sqlQuery = sqlQuery;
+    }
+
+    public SqlInfo getSqlInfo() {
+        return sqlInfo;
+    }
+
+    public void setSqlInfo(SqlInfo sqlInfo) {
+        this.sqlInfo = sqlInfo;
+        // SqlInfo에서 sqlId도 설정
+        if (sqlInfo != null) {
+            this.sqlId = sqlInfo.getFullSqlId();
+        }
+    }
+
+    /**
+     * SQL 상세 정보가 있는지 확인
+     */
+    public boolean hasSqlInfo() {
+        return sqlInfo != null;
     }
 
     public List<String> getImplementedInterfaces() {

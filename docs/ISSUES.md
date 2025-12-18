@@ -508,6 +508,121 @@ private FlowNode buildFlowTree(...) {
 - 트리 탐색에서 백트래킹 시 상태 복원(remove) 필요
 - 라벨(`[순환참조]`)을 붙이기 전에 실제로 순환인지 확인 필요
 
+### Issue #008: 엑셀 파라미터 컬럼에 Controller 파라미터만 표시되는 문제
+
+**발생일**: 2025-12-19
+**상태**: ✅ 해결
+
+#### 문제 상황
+```
+/user/detail.do
+├── [행1] Controller → Service.selectUser() → DAO.selectUser() → SQL: #userId#
+└── [행2] Controller → Service.selectDeptName() → DAO.selectDept() → SQL: #deptId#
+
+현재 결과: 행1, 행2 모두 "userId" 표시
+기대 결과: 행1은 "userId", 행2는 "userId, deptId"
+```
+
+- 모든 행에 Controller 파라미터(userId)만 표시됨
+- SQL에서 실제 사용하는 파라미터(#deptId#)가 누락됨
+
+#### 원인 분석
+```java
+// ExcelOutput.java:177-179
+for (FlowNode flow : result.getFlows()) {
+    // ❌ 문제: flow는 Controller 노드 → Controller 파라미터만 가져옴
+    String paramStr = formatParameters(flow.getParameters());
+
+    // ❌ 모든 행에 동일한 paramStr 적용
+    for (FlatFlowRow flatRow : flatRows) {
+        createCell(row, 3, paramStr, rowStyle);
+    }
+}
+```
+
+- `flow`는 루트 노드(Controller)
+- `flow.getParameters()`로 Controller 파라미터만 추출
+- 각 행(경로)별 SQL 파라미터를 고려하지 않음
+
+#### 고민했던 해결 방안
+
+| 방안 | 설명 | 장단점 |
+|------|------|--------|
+| SQL 파라미터만 | SQL에서 #param# 추출 | 분기 파라미터(gubun) 누락 |
+| Controller만 | 기존 방식 유지 | SQL별 파라미터 차이 표현 불가 |
+| **합집합** | Controller + SQL 파라미터 | ✅ 채택 - 실용적 범위 |
+| 컬럼 분리 | API/SQL 파라미터 별도 컬럼 | 복잡, 컬럼 증가 |
+
+**분기 파라미터 자동 추출 검토**:
+```
+Controller.getUser(userId, gubun)
+├── if(gubun==1) → DAO1.select1() → #userId#
+└── if(gubun==2) → DAO2.select2() → #deptId#
+```
+- gubun은 SQL에서 사용 안 됨, 분기 결정에만 사용
+- 추출하려면 if/switch 조건문 AST 분석 필요 → 큰 작업
+- **향후 과제로 결정**
+
+#### 최종 해결
+
+**1. SqlInfo에 SQL 파라미터 추출 기능 추가**
+```java
+// SqlInfo.java
+private static final Pattern IBATIS_PARAM_PATTERN = Pattern.compile("#([a-zA-Z_][a-zA-Z0-9_]*)#");
+private static final Pattern MYBATIS_PARAM_PATTERN = Pattern.compile("#\\{([a-zA-Z_][a-zA-Z0-9_.]*)\\}");
+
+private void extractParametersFromQuery(String query) {
+    Set<String> params = new HashSet<>();
+
+    // iBatis: #paramName#
+    Matcher ibatisMatcher = IBATIS_PARAM_PATTERN.matcher(query);
+    while (ibatisMatcher.find()) {
+        params.add(ibatisMatcher.group(1));
+    }
+
+    // MyBatis: #{paramName} 또는 #{obj.property}
+    Matcher mybatisMatcher = MYBATIS_PARAM_PATTERN.matcher(query);
+    while (mybatisMatcher.find()) {
+        String param = mybatisMatcher.group(1);
+        if (param.contains(".")) {
+            param = param.substring(param.lastIndexOf('.') + 1);
+        }
+        params.add(param);
+    }
+
+    sqlParameters.addAll(params);
+}
+```
+
+**2. ExcelOutput에서 Controller + SQL 파라미터 합집합**
+```java
+// 각 행별로 파라미터 합집합 계산
+for (FlatFlowRow flatRow : flatRows) {
+    String paramStr = mergeParameters(controllerParams, flatRow.sqlParams);
+    createCell(row, 3, paramStr, rowStyle);
+}
+
+private String mergeParameters(Set<String> controllerParams, List<String> sqlParams) {
+    Set<String> merged = new LinkedHashSet<>();
+    merged.addAll(controllerParams);  // Controller 파라미터 먼저
+    merged.addAll(sqlParams);         // SQL 파라미터 추가 (중복 제거)
+    return merged.isEmpty() ? "-" : String.join(", ", merged);
+}
+```
+
+#### 결과
+```
+/user/detail.do
+├── [행1] → DAO.selectUser() → 파라미터: userId ✅
+└── [행2] → DAO.selectDept() → 파라미터: userId, deptId ✅
+```
+
+#### 배운 점
+- 정적 분석의 한계: 분기 조건 파라미터, 죽은 코드 자동 판별 불가
+- 실용적 범위 설정의 중요성 - 완벽보다 실용적인 해결책
+- 정규식으로 SQL에서 파라미터 추출하는 패턴 학습
+- 사용자 관점에서 "어떤 정보가 필요한가" 고민 필요
+
 ---
 
 ## 미해결/진행중 문제

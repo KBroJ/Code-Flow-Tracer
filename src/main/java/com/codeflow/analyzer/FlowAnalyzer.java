@@ -24,8 +24,8 @@ public class FlowAnalyzer {
     // scope(변수명) → 클래스명 매핑 (변수명으로 클래스 추정)
     private final Map<String, String> scopeToClassName = new HashMap<>();
 
-    // SQL ID → SQL 쿼리 매핑 (IBatisParser에서 제공, 현재는 빈 상태)
-    private Map<String, String> sqlMappings = new HashMap<>();
+    // SQL ID → SqlInfo 매핑 (IBatisParser에서 제공)
+    private Map<String, SqlInfo> sqlInfoMap = new HashMap<>();
 
     // 분석 중 순환 참조 방지를 위한 방문 기록
     private final Set<String> visitedMethods = new HashSet<>();
@@ -37,10 +37,10 @@ public class FlowAnalyzer {
     }
 
     /**
-     * SQL 매핑 설정 (IBatisParser 연동용)
+     * SQL 정보 매핑 설정 (IBatisParser 연동용)
      */
-    public void setSqlMappings(Map<String, String> sqlMappings) {
-        this.sqlMappings = sqlMappings;
+    public void setSqlInfoMap(Map<String, SqlInfo> sqlInfoMap) {
+        this.sqlInfoMap = sqlInfoMap;
     }
 
     /**
@@ -237,6 +237,7 @@ public class FlowAnalyzer {
         // 현재 노드 생성
         FlowNode node = new FlowNode(clazz.getClassName(), method.getMethodName(), clazz.getClassType());
         node.setDepth(depth);
+        node.setFilePath(clazz.getFilePath() != null ? clazz.getFilePath().toString() : null);
         node.setUrlMapping(method.getUrlMapping());
         node.setClassUrlMapping(clazz.getBaseUrlMapping());      // 클래스 레벨 URL
         node.setMethodUrlMapping(method.getMethodUrlOnly());     // 메서드 레벨 URL
@@ -366,26 +367,20 @@ public class FlowAnalyzer {
 
     /**
      * DAO 메서드에서 SQL 정보 추출
+     *
+     * ParsedMethod.sqlIds에서 SQL ID를 가져와서 SqlInfo와 매핑합니다.
      */
     private void extractSqlInfo(FlowNode node, ParsedMethod method) {
-        // DAO 메서드에서 SQL ID 추출 시도
-        // 일반적인 패턴: dao.select("namespace.sqlId", params)
-        for (MethodCall call : method.getMethodCalls()) {
-            String methodName = call.getMethodName();
-            // selectOne, selectList, insert, update, delete 등 iBatis/MyBatis 메서드 패턴
-            if (methodName.startsWith("select") || methodName.equals("insert") ||
-                methodName.equals("update") || methodName.equals("delete") ||
-                methodName.equals("queryForList") || methodName.equals("queryForObject")) {
-                // SQL ID는 보통 첫 번째 파라미터로 전달됨
-                // 현재는 메서드명만으로 추정
-                String sqlId = node.getClassName().toLowerCase() + "." + node.getMethodName();
-                node.setSqlId(sqlId);
+        // JavaSourceParser에서 추출한 SQL ID 사용
+        if (method.hasSqlIds()) {
+            String sqlId = method.getSqlIds().get(0);  // 첫 번째 SQL ID 사용
+            node.setSqlId(sqlId);
 
-                // SQL 매핑이 있으면 쿼리 설정
-                if (sqlMappings.containsKey(sqlId)) {
-                    node.setSqlQuery(sqlMappings.get(sqlId));
-                }
-                break;
+            // SqlInfo 매핑이 있으면 설정
+            SqlInfo sqlInfo = IBatisParser.findBySqlId(sqlInfoMap, sqlId);
+            if (sqlInfo != null) {
+                node.setSqlInfo(sqlInfo);
+                node.setSqlQuery(sqlInfo.getQuery());
             }
         }
     }
