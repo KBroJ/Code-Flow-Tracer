@@ -190,6 +190,10 @@ public class FlowAnalyzer {
                 case DAO:
                     daos++;
                     break;
+                case COMPONENT:
+                case OTHER:
+                    // 통계에서 제외
+                    break;
             }
         }
 

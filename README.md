@@ -32,6 +32,40 @@ SI 프로젝트에서 **레거시 코드를 파악하는 것은 매우 시간이
 
 ---
 
+## 실행 결과
+
+### 콘솔 출력 (ANSI 색상 지원)
+
+![Console Output](assets/console-output.png)
+
+> Controller → Service → DAO → SQL까지 호출 흐름을 트리 형태로 시각화합니다.
+> 각 계층(Controller, Service, DAO)은 색상으로 구분되어 한눈에 파악할 수 있습니다.
+
+### 엑셀 출력
+
+![Excel Output](assets/excel-output.png)
+
+> 분석 결과를 엑셀 파일로 내보내 문서화하거나 인수인계 자료로 활용할 수 있습니다.
+> **호출 흐름** 시트와 **SQL 목록** 시트로 구성됩니다.
+
+<details>
+<summary>출력 스타일 옵션 보기</summary>
+
+| 스타일 | 설명 | 예시 |
+|--------|------|------|
+| `normal` | 기본 트리 구조 | `└── [Controller] UserController.selectUserList()` |
+| `compact` | 간결한 표시 | `UserController → UserService → UserDAO` |
+| `detailed` | URL, HTTP 메서드 포함 | `[GET] /user/list.do → UserController...` |
+
+```bash
+# 스타일 지정
+java -jar code-flow-tracer.jar -p /path/to/project -s detailed
+```
+
+</details>
+
+---
+
 ## 주요 기능
 
 | 기능 | 설명 | 상태 |
@@ -72,7 +106,10 @@ java -jar code-flow-tracer.jar -p /path/to/project
 java -jar code-flow-tracer.jar -p /path/to/project -u "/api/user/*"
 
 # 엑셀로 출력
-java -jar code-flow-tracer.jar -p /path/to/project -f excel -o result.xlsx
+java -jar code-flow-tracer.jar -p /path/to/project --excel -o result.xlsx
+
+# 출력 스타일 지정 (compact, normal, detailed)
+java -jar code-flow-tracer.jar -p /path/to/project -s detailed
 
 # GUI 모드
 java -jar code-flow-tracer.jar --gui
