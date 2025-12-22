@@ -1,7 +1,10 @@
 package com.codeflow.parser;
 
+import org.jdom2.Attribute;
+import org.jdom2.Content;
 import org.jdom2.Document;
 import org.jdom2.Element;
+import org.jdom2.Text;
 import org.jdom2.input.SAXBuilder;
 
 import java.io.IOException;
@@ -146,10 +149,10 @@ public class IBatisParser {
      * 줄바꿈, 들여쓰기, 동적 태그를 그대로 보존합니다.
      */
     private void extractQueryRecursive(Element element, StringBuilder query) {
-        for (org.jdom2.Content content : element.getContent()) {
-            if (content instanceof org.jdom2.Text) {
+        for (Content content : element.getContent()) {
+            if (content instanceof Text) {
                 // 텍스트 노드 (줄바꿈, 공백 포함하여 그대로)
-                String text = ((org.jdom2.Text) content).getText();
+                String text = ((Text) content).getText();
                 if (text != null) {
                     query.append(text);
                 }
@@ -158,7 +161,7 @@ public class IBatisParser {
 
                 // 여는 태그 출력 <tagName attr="value">
                 query.append("<").append(childElement.getName());
-                for (org.jdom2.Attribute attr : childElement.getAttributes()) {
+                for (Attribute attr : childElement.getAttributes()) {
                     query.append(" ").append(attr.getName())
                          .append("=\"").append(attr.getValue()).append("\"");
                 }
