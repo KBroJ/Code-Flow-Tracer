@@ -8,8 +8,10 @@ import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.MemberValuePair;
 import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.NormalAnnotationExpr;
 import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
 import com.github.javaparser.ast.expr.StringLiteralExpr;
@@ -199,7 +201,10 @@ public class JavaSourceParser {
         for (MethodCallExpr call : methodCalls) {
             String calledMethod = call.getNameAsString();
             String scope = call.getScope().map(Object::toString).orElse("");
-            parsedMethod.addMethodCall(new MethodCall(scope, calledMethod));
+
+            // 호출 인자 추출
+            List<String> arguments = extractCallArguments(call);
+            parsedMethod.addMethodCall(new MethodCall(scope, calledMethod, arguments));
 
             // DAO 메서드에서 SQL ID 추출 (iBatis/MyBatis 패턴)
             String sqlId = extractSqlId(call);
@@ -251,6 +256,77 @@ public class JavaSourceParser {
         }
 
         return null;
+    }
+
+    /**
+     * 메서드 호출의 인자를 추출합니다.
+     *
+     * 예: productDAO.selectProduct(item.getProductId())
+     *     → ["item.getProductId()"]
+     *
+     * 예: stockDAO.decreaseStock(item.getProductId(), item.getQuantity())
+     *     → ["item.getProductId()", "item.getQuantity()"]
+     */
+    private List<String> extractCallArguments(MethodCallExpr call) {
+        List<String> arguments = new ArrayList<>();
+
+        for (Expression arg : call.getArguments()) {
+            String argStr = formatArgument(arg);
+            if (argStr != null && !argStr.isEmpty()) {
+                arguments.add(argStr);
+            }
+        }
+
+        return arguments;
+    }
+
+    /**
+     * 인자 표현식을 읽기 쉬운 문자열로 변환합니다.
+     */
+    private String formatArgument(Expression arg) {
+        if (arg == null) {
+            return null;
+        }
+
+        // 메서드 호출: item.getProductId() → item.getProductId()
+        if (arg instanceof MethodCallExpr) {
+            MethodCallExpr methodCall = (MethodCallExpr) arg;
+            String scope = methodCall.getScope().map(Object::toString).orElse("");
+            String method = methodCall.getNameAsString();
+
+            // getter 메서드면 필드명으로 변환: getProductId() → productId
+            if (method.startsWith("get") && method.length() > 3) {
+                String fieldName = Character.toLowerCase(method.charAt(3)) + method.substring(4);
+                if (!scope.isEmpty()) {
+                    return scope + "." + fieldName;
+                }
+                return fieldName;
+            }
+
+            if (!scope.isEmpty()) {
+                return scope + "." + method + "()";
+            }
+            return method + "()";
+        }
+
+        // 변수 참조: orderId → orderId
+        if (arg instanceof NameExpr) {
+            return ((NameExpr) arg).getNameAsString();
+        }
+
+        // 문자열 리터럴: "OUT" → "OUT"
+        if (arg instanceof StringLiteralExpr) {
+            return "\"" + ((StringLiteralExpr) arg).getValue() + "\"";
+        }
+
+        // 필드 접근: this.orderId → orderId
+        if (arg instanceof FieldAccessExpr) {
+            FieldAccessExpr fieldAccess = (FieldAccessExpr) arg;
+            return fieldAccess.getScope() + "." + fieldAccess.getNameAsString();
+        }
+
+        // 기타: 원본 그대로 반환
+        return arg.toString();
     }
 
     /**

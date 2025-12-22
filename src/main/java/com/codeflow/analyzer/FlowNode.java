@@ -28,6 +28,7 @@ public class FlowNode {
     private SqlInfo sqlInfo;        // SQL 상세 정보 (파일명, namespace, 타입, 테이블 등)
     private List<String> implementedInterfaces = new ArrayList<>();  // 구현한 인터페이스 목록
     private List<ParameterInfo> parameters = new ArrayList<>();      // 메서드 파라미터 정보
+    private List<String> callArguments = new ArrayList<>();          // 이 메서드 호출 시 전달된 인자
     private int depth;              // 트리 깊이
     private List<FlowNode> children = new ArrayList<>();  // 호출하는 메서드들
 
@@ -192,6 +193,37 @@ public class FlowNode {
      */
     public boolean hasParameters() {
         return parameters != null && !parameters.isEmpty();
+    }
+
+    public List<String> getCallArguments() {
+        return callArguments;
+    }
+
+    public void setCallArguments(List<String> callArguments) {
+        this.callArguments = callArguments;
+    }
+
+    public void addCallArgument(String argument) {
+        if (argument != null && !argument.isEmpty()) {
+            this.callArguments.add(argument);
+        }
+    }
+
+    /**
+     * 호출 인자가 있는지 확인
+     */
+    public boolean hasCallArguments() {
+        return callArguments != null && !callArguments.isEmpty();
+    }
+
+    /**
+     * 호출 인자를 문자열로 반환
+     */
+    public String getCallArgumentsAsString() {
+        if (callArguments == null || callArguments.isEmpty()) {
+            return "";
+        }
+        return String.join(", ", callArguments);
     }
 
     public int getDepth() {

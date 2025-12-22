@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE sqlMap PUBLIC "-//iBATIS.com//DTD SQL Map 2.0//EN"
+    "http://www.ibatis.com/dtd/sql-map-2.dtd">
+
+<sqlMap namespace="productDAO">
+
+    <!-- 상품 단건 조회 -->
+    <select id="selectProduct" parameterClass="string" resultClass="productVO">
+        SELECT
+            PRODUCT_ID,
+            PRODUCT_NAME,
+            CATEGORY_ID,
+            PRICE,
+            SALE_YN,
+            DESCRIPTION,
+            REG_DATE
+        FROM TB_PRODUCT
+        WHERE PRODUCT_ID = #productId#
+    </select>
+
+    <!-- 상품 목록 조회 (동적 조건) -->
+    <select id="selectProductList" parameterClass="java.util.Map" resultClass="productVO">
+        SELECT
+            PRODUCT_ID,
+            PRODUCT_NAME,
+            CATEGORY_ID,
+            PRICE,
+            SALE_YN
+        FROM TB_PRODUCT
+        <dynamic prepend="WHERE">
+            <isNotEmpty property="categoryId">
+                AND CATEGORY_ID = #categoryId#
+            </isNotEmpty>
+            <isNotEmpty property="saleYn">
+                AND SALE_YN = #saleYn#
+            </isNotEmpty>
+            <isNotEmpty property="minPrice">
+                AND PRICE >= #minPrice#
+            </isNotEmpty>
+            <isNotEmpty property="maxPrice">
+                <![CDATA[AND PRICE <= #maxPrice#]]>
+            </isNotEmpty>
+            <isNotEmpty property="productName">
+                AND PRODUCT_NAME LIKE '%' || #productName# || '%'
+            </isNotEmpty>
+        </dynamic>
+        ORDER BY REG_DATE DESC
+    </select>
+
+    <!-- 인기 상품 조회 -->
+    <select id="selectTopProducts" parameterClass="java.util.Map" resultClass="java.util.HashMap">
+        SELECT
+            P.PRODUCT_ID,
+            P.PRODUCT_NAME,
+            SUM(OI.QUANTITY) AS TOTAL_SOLD,
+            SUM(OI.TOTAL_PRICE) AS TOTAL_REVENUE
+        FROM TB_PRODUCT P
+        INNER JOIN TB_ORDER_ITEM OI ON P.PRODUCT_ID = OI.PRODUCT_ID
+        INNER JOIN TB_ORDER O ON OI.ORDER_ID = O.ORDER_ID
+        WHERE O.ORDER_DATE BETWEEN #startDate# AND #endDate#
+          AND O.ORDER_STATUS != 'CANCELLED'
+        GROUP BY P.PRODUCT_ID, P.PRODUCT_NAME
+        ORDER BY TOTAL_SOLD DESC
+    </select>
+
+    <!-- 상품 판매 상태 변경 -->
+    <update id="updateProductSaleYn" parameterClass="java.util.Map">
+        UPDATE TB_PRODUCT
+        SET SALE_YN = #saleYn#,
+            MOD_DATE = SYSDATE
+        WHERE PRODUCT_ID = #productId#
+    </update>
+
+</sqlMap>

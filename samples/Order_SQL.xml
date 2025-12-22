@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE sqlMap PUBLIC "-//iBATIS.com//DTD SQL Map 2.0//EN"
+    "http://www.ibatis.com/dtd/sql-map-2.dtd">
+
+<sqlMap namespace="orderDAO">
+
+    <!-- 주문 목록 조회 (동적 검색 조건) -->
+    <select id="selectOrderList" parameterClass="java.util.Map" resultClass="orderVO">
+        SELECT
+            O.ORDER_ID,
+            O.CUSTOMER_ID,
+            O.ORDER_DATE,
+            O.TOTAL_AMOUNT,
+            O.ORDER_STATUS,
+            C.CUSTOMER_NAME,
+            C.PHONE
+        FROM TB_ORDER O
+        INNER JOIN TB_CUSTOMER C ON O.CUSTOMER_ID = C.CUSTOMER_ID
+        <dynamic prepend="WHERE">
+            <isNotEmpty property="startDate">
+                <isNotEmpty property="endDate">
+                    AND O.ORDER_DATE BETWEEN #startDate# AND #endDate#
+                </isNotEmpty>
+            </isNotEmpty>
+            <isNotEmpty property="orderStatus">
+                AND O.ORDER_STATUS = #orderStatus#
+            </isNotEmpty>
+            <isNotEmpty property="searchKeyword">
+                <isEqual property="searchType" compareValue="orderId">
+                    AND O.ORDER_ID LIKE '%' || #searchKeyword# || '%'
+                </isEqual>
+                <isEqual property="searchType" compareValue="customerName">
+                    AND C.CUSTOMER_NAME LIKE '%' || #searchKeyword# || '%'
+                </isEqual>
+                <isEqual property="searchType" compareValue="phone">
+                    AND C.PHONE LIKE '%' || #searchKeyword# || '%'
+                </isEqual>
+            </isNotEmpty>
+        </dynamic>
+        ORDER BY O.ORDER_DATE DESC
+    </select>
+
+    <!-- 주문 단건 조회 -->
+    <select id="selectOrder" parameterClass="string" resultClass="orderVO">
+        SELECT
+            ORDER_ID,
+            CUSTOMER_ID,
+            ORDER_DATE,
+            TOTAL_AMOUNT,
+            ORDER_STATUS,
+            CANCEL_REASON,
+            REG_DATE,
+            MOD_DATE
+        FROM TB_ORDER
+        WHERE ORDER_ID = #orderId#
+    </select>
+
+    <!-- 고객 정보 조회 -->
+    <select id="selectCustomerInfo" parameterClass="string" resultClass="customerVO">
+        SELECT
+            CUSTOMER_ID,
+            CUSTOMER_NAME,
+            EMAIL,
+            PHONE,
+            ADDRESS
+        FROM TB_CUSTOMER
+        WHERE CUSTOMER_ID = #customerId#
+    </select>
+
+    <!-- 주문 상품 목록 조회 -->
+    <select id="selectOrderItems" parameterClass="string" resultClass="orderItemVO">
+        SELECT
+            OI.ITEM_ID,
+            OI.ORDER_ID,
+            OI.PRODUCT_ID,
+            OI.QUANTITY,
+            OI.UNIT_PRICE,
+            OI.TOTAL_PRICE,
+            P.PRODUCT_NAME
+        FROM TB_ORDER_ITEM OI
+        INNER JOIN TB_PRODUCT P ON OI.PRODUCT_ID = P.PRODUCT_ID
+        WHERE OI.ORDER_ID = #orderId#
+    </select>
+
+    <!-- 주문 생성 -->
+    <insert id="insertOrder" parameterClass="orderVO">
+        <selectKey keyProperty="orderId" resultClass="string" type="pre">
+            SELECT 'ORD' || TO_CHAR(SYSDATE, 'YYYYMMDD') || LPAD(ORDER_SEQ.NEXTVAL, 6, '0') FROM DUAL
+        </selectKey>
+        INSERT INTO TB_ORDER (
+            ORDER_ID,
+            CUSTOMER_ID,
+            ORDER_DATE,
+            TOTAL_AMOUNT,
+            ORDER_STATUS,
+            DELIVERY_ADDRESS,
+            REG_DATE
+        ) VALUES (
+            #orderId#,
+            #customerId#,
+            SYSDATE,
+            #totalAmount#,
+            'ORDERED',
+            #deliveryAddress#,
+            SYSDATE
+        )
+    </insert>
+
+    <!-- 주문 상품 생성 -->
+    <insert id="insertOrderItem" parameterClass="orderItemVO">
+        INSERT INTO TB_ORDER_ITEM (
+            ITEM_ID,
+            ORDER_ID,
+            PRODUCT_ID,
+            QUANTITY,
+            UNIT_PRICE,
+            TOTAL_PRICE
+        ) VALUES (
+            ORDER_ITEM_SEQ.NEXTVAL,
+            #orderId#,
+            #productId#,
+            #quantity#,
+            #unitPrice#,
+            #quantity# * #unitPrice#
+        )
+    </insert>
+
+    <!-- 주문 상태 변경 -->
+    <update id="updateOrderStatus" parameterClass="java.util.Map">
+        UPDATE TB_ORDER
+        SET ORDER_STATUS = #status#,
+            <isNotEmpty property="reason">
+                CANCEL_REASON = #reason#,
+            </isNotEmpty>
+            MOD_DATE = SYSDATE
+        WHERE ORDER_ID = #orderId#
+    </update>
+
+    <!-- 대량 주문 상태 변경 (foreach) -->
+    <update id="bulkUpdateOrderStatus" parameterClass="java.util.Map">
+        UPDATE TB_ORDER
+        SET ORDER_STATUS = #status#,
+            MOD_DATE = SYSDATE
+        WHERE ORDER_ID IN
+        <iterate property="orderIds" open="(" close=")" conjunction=",">
+            #orderIds[]#
+        </iterate>
+    </update>
+
+    <!-- 주문 통계 요약 -->
+    <select id="selectOrderSummary" parameterClass="java.util.Map" resultClass="java.util.HashMap">
+        SELECT
+            COUNT(*) AS TOTAL_COUNT,
+            SUM(TOTAL_AMOUNT) AS TOTAL_AMOUNT,
+            COUNT(CASE WHEN ORDER_STATUS = 'ORDERED' THEN 1 END) AS ORDERED_COUNT,
+            COUNT(CASE WHEN ORDER_STATUS = 'SHIPPED' THEN 1 END) AS SHIPPED_COUNT,
+            COUNT(CASE WHEN ORDER_STATUS = 'DELIVERED' THEN 1 END) AS DELIVERED_COUNT,
+            COUNT(CASE WHEN ORDER_STATUS = 'CANCELLED' THEN 1 END) AS CANCELLED_COUNT
+        FROM TB_ORDER
+        WHERE ORDER_DATE BETWEEN #startDate# AND #endDate#
+    </select>
+
+    <!-- 일별 통계 (그룹핑 옵션) -->
+    <select id="selectDailyStats" parameterClass="java.util.Map" resultClass="java.util.HashMap">
+        SELECT
+            <isEqual property="groupBy" compareValue="daily">
+                TO_CHAR(ORDER_DATE, 'YYYY-MM-DD') AS STAT_DATE,
+            </isEqual>
+            <isEqual property="groupBy" compareValue="monthly">
+                TO_CHAR(ORDER_DATE, 'YYYY-MM') AS STAT_DATE,
+            </isEqual>
+            <isEqual property="groupBy" compareValue="yearly">
+                TO_CHAR(ORDER_DATE, 'YYYY') AS STAT_DATE,
+            </isEqual>
+            COUNT(*) AS ORDER_COUNT,
+            SUM(TOTAL_AMOUNT) AS TOTAL_AMOUNT
+        FROM TB_ORDER
+        WHERE ORDER_DATE BETWEEN #startDate# AND #endDate#
+        GROUP BY
+            <isEqual property="groupBy" compareValue="daily">
+                TO_CHAR(ORDER_DATE, 'YYYY-MM-DD')
+            </isEqual>
+            <isEqual property="groupBy" compareValue="monthly">
+                TO_CHAR(ORDER_DATE, 'YYYY-MM')
+            </isEqual>
+            <isEqual property="groupBy" compareValue="yearly">
+                TO_CHAR(ORDER_DATE, 'YYYY')
+            </isEqual>
+        ORDER BY STAT_DATE
+    </select>
+
+</sqlMap>

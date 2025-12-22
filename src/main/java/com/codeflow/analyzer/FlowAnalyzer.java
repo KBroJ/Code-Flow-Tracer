@@ -302,11 +302,20 @@ public class FlowAnalyzer {
             // 메서드가 없으면 노드만 생성 (호출은 있지만 구현이 없는 경우)
             FlowNode unresolvedNode = new FlowNode(className, methodName, targetClass.getClassType());
             unresolvedNode.setDepth(depth);
+            // 호출 인자 설정
+            if (call.hasArguments()) {
+                unresolvedNode.setCallArguments(call.getArguments());
+            }
             return unresolvedNode;
         }
 
         // 재귀적으로 하위 호출 분석
-        return buildFlowTree(targetClass, targetMethod, depth);
+        FlowNode node = buildFlowTree(targetClass, targetMethod, depth);
+        // 호출 인자 설정
+        if (call.hasArguments()) {
+            node.setCallArguments(call.getArguments());
+        }
+        return node;
     }
 
     /**
