@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE sqlMap PUBLIC "-//iBATIS.com//DTD SQL Map 2.0//EN"
+    "http://www.ibatis.com/dtd/sql-map-2.dtd">
+
+<sqlMap namespace="paymentDAO">
+
+    <!-- 결제 정보 조회 -->
+    <select id="selectPayment" parameterClass="string" resultClass="paymentVO">
+        SELECT
+            PAYMENT_ID,
+            ORDER_ID,
+            AMOUNT,
+            PAYMENT_METHOD,
+            PAYMENT_STATUS,
+            PAID_AT,
+            CANCELLED_AT
+        FROM TB_PAYMENT
+        WHERE ORDER_ID = #orderId#
+    </select>
+
+    <!-- 결제 등록 -->
+    <insert id="insertPayment" parameterClass="paymentVO">
+        INSERT INTO TB_PAYMENT (
+            PAYMENT_ID,
+            ORDER_ID,
+            AMOUNT,
+            PAYMENT_METHOD,
+            PAYMENT_STATUS,
+            PAID_AT
+        ) VALUES (
+            PAYMENT_SEQ.NEXTVAL,
+            #orderId#,
+            #amount#,
+            #paymentMethod#,
+            'COMPLETED',
+            SYSDATE
+        )
+    </insert>
+
+    <!-- 결제 취소 -->
+    <update id="cancelPayment" parameterClass="string">
+        UPDATE TB_PAYMENT
+        SET PAYMENT_STATUS = 'CANCELLED',
+            CANCELLED_AT = SYSDATE
+        WHERE ORDER_ID = #orderId#
+    </update>
+
+</sqlMap>

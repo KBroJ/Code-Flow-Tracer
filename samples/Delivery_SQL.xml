@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE sqlMap PUBLIC "-//iBATIS.com//DTD SQL Map 2.0//EN"
+    "http://www.ibatis.com/dtd/sql-map-2.dtd">
+
+<sqlMap namespace="deliveryDAO">
+
+    <!-- 배송 정보 조회 -->
+    <select id="selectDelivery" parameterClass="string" resultClass="deliveryVO">
+        SELECT
+            DELIVERY_ID,
+            ORDER_ID,
+            ADDRESS,
+            RECIPIENT_NAME,
+            RECIPIENT_PHONE,
+            DELIVERY_STATUS,
+            TRACKING_NUMBER,
+            SHIPPED_AT,
+            DELIVERED_AT
+        FROM TB_DELIVERY
+        WHERE ORDER_ID = #orderId#
+    </select>
+
+    <!-- 배송 등록 -->
+    <insert id="insertDelivery" parameterClass="deliveryVO">
+        INSERT INTO TB_DELIVERY (
+            DELIVERY_ID,
+            ORDER_ID,
+            ADDRESS,
+            RECIPIENT_NAME,
+            RECIPIENT_PHONE,
+            DELIVERY_STATUS,
+            REG_DATE
+        ) VALUES (
+            DELIVERY_SEQ.NEXTVAL,
+            #orderId#,
+            #address#,
+            #recipientName#,
+            #recipientPhone#,
+            'PENDING',
+            SYSDATE
+        )
+    </insert>
+
+    <!-- 배송 취소 -->
+    <update id="cancelDelivery" parameterClass="string">
+        UPDATE TB_DELIVERY
+        SET DELIVERY_STATUS = 'CANCELLED',
+            MOD_DATE = SYSDATE
+        WHERE ORDER_ID = #orderId#
+          AND DELIVERY_STATUS IN ('PENDING', 'PREPARING')
+    </update>
+
+    <!-- 배송 상태 변경 -->
+    <update id="updateDeliveryStatus" parameterClass="java.util.Map">
+        UPDATE TB_DELIVERY
+        SET DELIVERY_STATUS = #status#,
+            <isEqual property="status" compareValue="SHIPPED">
+                SHIPPED_AT = SYSDATE,
+            </isEqual>
+            <isEqual property="status" compareValue="DELIVERED">
+                DELIVERED_AT = SYSDATE,
+            </isEqual>
+            MOD_DATE = SYSDATE
+        WHERE ORDER_ID = #orderId#
+    </update>
+
+</sqlMap>

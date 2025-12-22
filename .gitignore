@@ -34,3 +34,9 @@ result_output/
 
 # Personal study notes (not for git)
 study/
+
+# Blog drafts (not for git)
+docs/blog/
+
+# Windows reserved name (artifact)
+nul

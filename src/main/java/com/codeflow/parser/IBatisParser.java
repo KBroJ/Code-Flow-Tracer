@@ -1,7 +1,10 @@
 package com.codeflow.parser;
 
+import org.jdom2.Attribute;
+import org.jdom2.Content;
 import org.jdom2.Document;
 import org.jdom2.Element;
+import org.jdom2.Text;
 import org.jdom2.input.SAXBuilder;
 
 import java.io.IOException;
@@ -53,8 +56,6 @@ public class IBatisParser {
                 sqlMap.putAll(fileSqlMap);
             } catch (Exception e) {
                 // 파싱 실패한 파일은 건너뛰기 (SQL 매퍼가 아닌 XML일 수 있음)
-                // 디버그용 로그
-                // System.err.println("XML 파싱 스킵: " + xmlFile + " - " + e.getMessage());
             }
         }
 
@@ -135,36 +136,135 @@ public class IBatisParser {
 
     /**
      * 요소에서 쿼리 텍스트 추출
-     * (CDATA, 하위 요소 포함)
+     * XML 원본 형태 그대로 (줄바꿈, 들여쓰기, 동적 태그 포함)
      */
     private String extractQuery(Element element) {
         StringBuilder query = new StringBuilder();
         extractQueryRecursive(element, query);
-        return normalizeQuery(query.toString());
+        return trimPreservingStructure(query.toString());
     }
 
     /**
-     * 재귀적으로 쿼리 추출 (if, choose, foreach 등 동적 SQL 처리)
+     * 재귀적으로 쿼리 추출 (XML 원본 형태 유지)
+     * 줄바꿈, 들여쓰기, 동적 태그를 그대로 보존합니다.
      */
     private void extractQueryRecursive(Element element, StringBuilder query) {
-        // 텍스트 내용 추가
-        String text = element.getTextTrim();
-        if (text != null && !text.isEmpty()) {
-            query.append(text).append(" ");
-        }
+        for (Content content : element.getContent()) {
+            if (content instanceof Text) {
+                // 텍스트 노드 (줄바꿈, 공백 포함하여 그대로)
+                String text = ((Text) content).getText();
+                if (text != null) {
+                    query.append(text);
+                }
+            } else if (content instanceof Element) {
+                Element childElement = (Element) content;
 
-        // 하위 요소 처리
-        for (Element child : element.getChildren()) {
-            extractQueryRecursive(child, query);
+                // 여는 태그 출력 <tagName attr="value">
+                query.append("<").append(childElement.getName());
+                for (Attribute attr : childElement.getAttributes()) {
+                    query.append(" ").append(attr.getName())
+                         .append("=\"").append(attr.getValue()).append("\"");
+                }
+                query.append(">");
+
+                // 자식 요소 재귀 처리
+                extractQueryRecursive(childElement, query);
+
+                // 닫는 태그 출력 </tagName>
+                query.append("</").append(childElement.getName()).append(">");
+            }
+            // CDATA도 Text로 처리됨
         }
     }
 
     /**
-     * 쿼리 정규화 (불필요한 공백 제거)
+     * 앞뒤 빈 줄 제거, 공통 들여쓰기 제거, 내부 구조(줄바꿈)는 유지
      */
-    private String normalizeQuery(String query) {
-        if (query == null) return "";
-        return query.replaceAll("\\s+", " ").trim();
+    private String trimPreservingStructure(String query) {
+        if (query == null || query.isEmpty()) return "";
+
+        String[] lines = query.split("\n", -1);  // -1: 빈 문자열도 유지
+
+        // 공통 들여쓰기 찾기 (비어있지 않은 줄만)
+        int minIndent = Integer.MAX_VALUE;
+        for (String line : lines) {
+            if (line.trim().isEmpty()) continue;
+            int indent = countLeadingSpaces(line);
+            minIndent = Math.min(minIndent, indent);
+        }
+
+        if (minIndent == Integer.MAX_VALUE) {
+            return "";  // 빈 줄만 있음
+        }
+
+        // 첫 번째/마지막 비어있지 않은 줄 찾기
+        int firstNonEmpty = -1;
+        int lastNonEmpty = -1;
+        for (int i = 0; i < lines.length; i++) {
+            if (!lines[i].trim().isEmpty()) {
+                if (firstNonEmpty == -1) firstNonEmpty = i;
+                lastNonEmpty = i;
+            }
+        }
+
+        // 공통 들여쓰기 제거 + 앞뒤 빈 줄 제거
+        StringBuilder sb = new StringBuilder();
+        for (int i = firstNonEmpty; i <= lastNonEmpty; i++) {
+            String line = lines[i];
+
+            // 빈 줄은 그대로 유지
+            if (line.trim().isEmpty()) {
+                sb.append("\n");
+                continue;
+            }
+
+            // 공통 들여쓰기 제거
+            if (minIndent > 0 && line.length() > minIndent) {
+                sb.append(removeLeadingSpaces(line, minIndent));
+            } else {
+                sb.append(line);
+            }
+
+            if (i < lastNonEmpty) {
+                sb.append("\n");
+            }
+        }
+
+        return sb.toString();
+    }
+
+    /**
+     * 줄 앞 공백 개수 세기
+     */
+    private int countLeadingSpaces(String line) {
+        int count = 0;
+        for (char c : line.toCharArray()) {
+            if (c == ' ') count++;
+            else if (c == '\t') count += 4;
+            else break;
+        }
+        return count;
+    }
+
+    /**
+     * 줄 앞에서 지정된 수의 공백 제거
+     */
+    private String removeLeadingSpaces(String line, int spacesToRemove) {
+        int removed = 0;
+        int idx = 0;
+        while (removed < spacesToRemove && idx < line.length()) {
+            char c = line.charAt(idx);
+            if (c == ' ') {
+                removed++;
+                idx++;
+            } else if (c == '\t') {
+                removed += 4;
+                idx++;
+            } else {
+                break;
+            }
+        }
+        return line.substring(idx);
     }
 
     /**

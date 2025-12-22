@@ -2,7 +2,6 @@ package com.codeflow.output;
 
 import com.codeflow.analyzer.FlowNode;
 import com.codeflow.analyzer.FlowResult;
-import com.codeflow.parser.ParameterInfo;
 import com.codeflow.parser.SqlInfo;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.ss.util.CellRangeAddress;
@@ -13,9 +12,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 
 /**
  * 엑셀 출력 (Apache POI)
@@ -93,7 +90,7 @@ public class ExcelOutput {
         normalStyle.setBorderTop(BorderStyle.THIN);
         normalStyle.setBorderLeft(BorderStyle.THIN);
         normalStyle.setBorderRight(BorderStyle.THIN);
-        normalStyle.setWrapText(true);
+        normalStyle.setWrapText(false);
         normalStyle.setVerticalAlignment(VerticalAlignment.CENTER);
 
         // 줄무늬용 스타일 (연회색 배경)
@@ -104,7 +101,7 @@ public class ExcelOutput {
         alternateStyle.setBorderTop(BorderStyle.THIN);
         alternateStyle.setBorderLeft(BorderStyle.THIN);
         alternateStyle.setBorderRight(BorderStyle.THIN);
-        alternateStyle.setWrapText(true);
+        alternateStyle.setWrapText(false);
         alternateStyle.setVerticalAlignment(VerticalAlignment.CENTER);
     }
 
@@ -164,8 +161,12 @@ public class ExcelOutput {
     private void createCallFlowSheet(Workbook workbook, FlowResult result) {
         Sheet sheet = workbook.createSheet("호출 흐름");
 
-        // 헤더
-        String[] headers = {"No", "HTTP", "URL", "파라미터", "Controller", "Service", "DAO", "SQL 파일", "SQL ID", "테이블", "쿼리"};
+        // 헤더 (파일명/메소드명 분리, Service 인터페이스/구현체 분리)
+        String[] headers = {"No", "HTTP", "URL",
+                "Controller 파일", "Controller 메소드",
+                "Service 파일", "ServiceImpl 파일", "ServiceImpl 메소드",
+                "DAO 파일", "DAO 메소드",
+                "SQL 파일"};
         Row headerRow = sheet.createRow(0);
         for (int i = 0; i < headers.length; i++) {
             Cell cell = headerRow.createCell(i);
@@ -175,11 +176,8 @@ public class ExcelOutput {
 
         // 데이터 (각 플로우를 평면 테이블로 출력)
         int rowNum = 1;
-        int flowNo = 1;
+        int flowNo = 1;  // URL 그룹 번호 (색상 구분용)
         for (FlowNode flow : result.getFlows()) {
-            // Controller 파라미터 (기본 파라미터)
-            Set<String> controllerParams = extractControllerParams(flow.getParameters());
-
             // 플로우를 평면 행들로 변환
             List<FlatFlowRow> flatRows = flattenFlow(flow);
 
@@ -189,100 +187,41 @@ public class ExcelOutput {
             for (FlatFlowRow flatRow : flatRows) {
                 Row row = sheet.createRow(rowNum);
 
-                // Controller 파라미터 + SQL 파라미터 합집합
-                String paramStr = mergeParameters(controllerParams, flatRow.sqlParams);
-
-                createCell(row, 0, String.valueOf(flowNo), rowStyle);
+                // No는 순차 번호 (rowNum)
+                createCell(row, 0, String.valueOf(rowNum), rowStyle);
                 createCell(row, 1, flow.getHttpMethod() != null ? flow.getHttpMethod() : "", rowStyle);
                 createCell(row, 2, flow.getUrlMapping() != null ? flow.getUrlMapping() : "", rowStyle);
-                createCell(row, 3, paramStr, rowStyle);
-                createCell(row, 4, flatRow.controller, rowStyle);
-                createCell(row, 5, flatRow.service, rowStyle);
-                createCell(row, 6, flatRow.dao, rowStyle);
-                createCell(row, 7, flatRow.sqlFile, rowStyle);
-                createCell(row, 8, flatRow.sqlId, rowStyle);
-                createCell(row, 9, flatRow.tables, rowStyle);
-                // 쿼리 (너무 길면 잘라서 표시)
-                String query = flatRow.query;
-                if (query != null && query.length() > 500) {
-                    query = query.substring(0, 500) + "...";
-                }
-                createCell(row, 10, query != null ? query : "", rowStyle);
+                createCell(row, 3, flatRow.controllerFile, rowStyle);
+                createCell(row, 4, flatRow.controllerMethod, rowStyle);
+                createCell(row, 5, flatRow.serviceInterfaceFile, rowStyle);
+                createCell(row, 6, flatRow.serviceImplFile, rowStyle);
+                createCell(row, 7, flatRow.serviceImplMethod, rowStyle);
+                createCell(row, 8, flatRow.daoFile, rowStyle);
+                createCell(row, 9, flatRow.daoMethod, rowStyle);
+                createCell(row, 10, flatRow.sqlFile, rowStyle);
 
                 rowNum++;
             }
             flowNo++;
         }
 
-        // 열 너비 조정
+        // 열 너비 조정 (파일명/메소드명 분리, Service 인터페이스/구현체 분리)
         sheet.setColumnWidth(0, 5 * 256);   // No
         sheet.setColumnWidth(1, 7 * 256);   // HTTP
         sheet.setColumnWidth(2, 25 * 256);  // URL
-        sheet.setColumnWidth(3, 30 * 256);  // 파라미터
-        sheet.setColumnWidth(4, 30 * 256);  // Controller
-        sheet.setColumnWidth(5, 30 * 256);  // Service
-        sheet.setColumnWidth(6, 30 * 256);  // DAO
-        sheet.setColumnWidth(7, 18 * 256);  // SQL 파일
-        sheet.setColumnWidth(8, 22 * 256);  // SQL ID
-        sheet.setColumnWidth(9, 25 * 256);  // 테이블
-        sheet.setColumnWidth(10, 60 * 256); // 쿼리
+        sheet.setColumnWidth(3, 22 * 256);  // Controller 파일
+        sheet.setColumnWidth(4, 22 * 256);  // Controller 메소드
+        sheet.setColumnWidth(5, 18 * 256);  // Service 파일 (인터페이스)
+        sheet.setColumnWidth(6, 22 * 256);  // ServiceImpl 파일
+        sheet.setColumnWidth(7, 22 * 256);  // ServiceImpl 메소드
+        sheet.setColumnWidth(8, 18 * 256);  // DAO 파일
+        sheet.setColumnWidth(9, 18 * 256);  // DAO 메소드
+        sheet.setColumnWidth(10, 18 * 256); // SQL 파일
 
         // 필터 추가
         if (rowNum > 1) {
             sheet.setAutoFilter(new CellRangeAddress(0, rowNum - 1, 0, headers.length - 1));
         }
-    }
-
-    /**
-     * Controller 파라미터에서 실제 사용 필드 추출
-     */
-    private Set<String> extractControllerParams(List<ParameterInfo> parameters) {
-        Set<String> result = new LinkedHashSet<>();
-
-        if (parameters == null || parameters.isEmpty()) {
-            return result;
-        }
-
-        for (ParameterInfo param : parameters) {
-            // Spring 자동 주입 파라미터는 제외
-            if (param.isSpringInjected()) {
-                continue;
-            }
-
-            // @RequestParam, @PathVariable 파라미터는 파라미터명 그대로 사용
-            if (param.isRequestParameter()) {
-                result.add(param.getName());
-            }
-            // VO/Map 타입이고 사용 필드가 있으면 사용 필드 추가
-            else if (param.hasUsedFields()) {
-                result.addAll(param.getUsedFields());
-            }
-            // 기본 타입(String, int 등)은 파라미터명 사용
-            else if (param.isPrimitiveOrWrapper()) {
-                result.add(param.getName());
-            }
-        }
-
-        return result;
-    }
-
-    /**
-     * Controller 파라미터와 SQL 파라미터를 합집합으로 병합
-     */
-    private String mergeParameters(Set<String> controllerParams, List<String> sqlParams) {
-        Set<String> merged = new LinkedHashSet<>();
-
-        // Controller 파라미터 먼저 추가
-        if (controllerParams != null) {
-            merged.addAll(controllerParams);
-        }
-
-        // SQL 파라미터 추가 (중복 제거됨)
-        if (sqlParams != null) {
-            merged.addAll(sqlParams);
-        }
-
-        return merged.isEmpty() ? "-" : String.join(", ", merged);
     }
 
     /**
@@ -295,35 +234,38 @@ public class ExcelOutput {
     }
 
     /**
-     * 재귀적으로 FlowNode 트리를 평면화
+     * 재귀적으로 FlowNode 트리를 평면화 (파일명/메소드명 분리)
      */
     private void flattenFlowRecursive(FlowNode node, FlowPath currentPath, List<FlatFlowRow> rows) {
         // 현재 노드의 레이어에 따라 경로 업데이트
         FlowPath newPath = currentPath.copy();
 
         if (node.getClassType() != null) {
-            String methodCall = node.getClassName() + "." + node.getMethodName() + "()";
+            String fileName = node.getClassName() + ".java";
+            String methodName = node.getMethodName() + "()";
 
             switch (node.getClassType()) {
                 case CONTROLLER:
-                    newPath.controller = methodCall;
+                    newPath.controllerFile = fileName;
+                    newPath.controllerMethod = methodName;
                     break;
                 case SERVICE:
-                    newPath.service = methodCall;
+                    // 구현체 파일과 메소드
+                    newPath.serviceImplFile = fileName;
+                    newPath.serviceImplMethod = methodName;
+                    // 인터페이스 파일 (implementedInterfaces에서 첫 번째 항목)
+                    List<String> interfaces = node.getImplementedInterfaces();
+                    if (interfaces != null && !interfaces.isEmpty()) {
+                        newPath.serviceInterfaceFile = interfaces.get(0) + ".java";
+                    }
                     break;
                 case DAO:
-                    newPath.dao = methodCall;
+                    newPath.daoFile = fileName;
+                    newPath.daoMethod = methodName;
                     // SQL 정보가 있으면 추가
                     if (node.hasSqlInfo()) {
                         SqlInfo sqlInfo = node.getSqlInfo();
                         newPath.sqlFile = sqlInfo.getFileName();
-                        newPath.sqlId = sqlInfo.getSqlId();
-                        newPath.tables = sqlInfo.getTablesAsString();
-                        newPath.query = sqlInfo.getQuery();
-                        // SQL 파라미터 추가
-                        if (sqlInfo.hasSqlParameters()) {
-                            newPath.sqlParams = new ArrayList<>(sqlInfo.getSqlParameters());
-                        }
                     }
                     break;
                 default:
@@ -343,13 +285,13 @@ public class ExcelOutput {
     }
 
     /**
-     * SQL 목록 시트 생성
+     * SQL 목록 시트 생성 (호출 URL, SQL 파라미터 포함)
      */
     private void createSqlListSheet(Workbook workbook, FlowResult result) {
         Sheet sheet = workbook.createSheet("SQL 목록");
 
-        // 헤더
-        String[] headers = {"No", "SQL 파일", "SQL ID", "타입", "테이블", "쿼리"};
+        // 헤더 (호출 URL, SQL 파라미터 추가)
+        String[] headers = {"No", "호출 URL", "SQL 파일", "SQL ID", "타입", "테이블", "SQL 파라미터", "쿼리"};
         Row headerRow = sheet.createRow(0);
         for (int i = 0; i < headers.length; i++) {
             Cell cell = headerRow.createCell(i);
@@ -357,40 +299,53 @@ public class ExcelOutput {
             cell.setCellStyle(headerStyle);
         }
 
-        // 모든 FlowNode에서 SQL 정보 추출
-        List<SqlInfo> sqlInfoList = new ArrayList<>();
+        // 모든 FlowNode에서 SQL 정보 + URL 추출
+        List<SqlWithUrl> sqlWithUrlList = new ArrayList<>();
         for (FlowNode flow : result.getFlows()) {
-            collectSqlInfo(flow, sqlInfoList);
+            String url = flow.getUrlMapping() != null ? flow.getUrlMapping() : "";
+            collectSqlInfoWithUrl(flow, url, sqlWithUrlList);
         }
 
-        // 데이터 출력
+        // 데이터 출력 (URL 기준으로 색상 구분)
         int rowNum = 1;
-        for (SqlInfo sqlInfo : sqlInfoList) {
-            Row row = sheet.createRow(rowNum);
-            CellStyle style = (rowNum % 2 == 1) ? normalStyle : alternateStyle;
-
-            createCell(row, 0, String.valueOf(rowNum), style);
-            createCell(row, 1, sqlInfo.getFileName(), style);
-            createCell(row, 2, sqlInfo.getSqlId(), style);
-            createCell(row, 3, sqlInfo.getType().name(), style);
-            createCell(row, 4, sqlInfo.getTablesAsString(), style);
-            // 쿼리 (너무 길면 잘라서 표시)
-            String query = sqlInfo.getQuery();
-            if (query != null && query.length() > 1000) {
-                query = query.substring(0, 1000) + "...";
+        int urlColorIndex = 1;
+        String previousUrl = null;
+        for (SqlWithUrl sqlWithUrl : sqlWithUrlList) {
+            // URL이 바뀌면 색상 인덱스 변경
+            if (previousUrl != null && !previousUrl.equals(sqlWithUrl.url)) {
+                urlColorIndex++;
             }
-            createCell(row, 5, query != null ? query : "", style);
+            previousUrl = sqlWithUrl.url;
+
+            Row row = sheet.createRow(rowNum);
+            CellStyle style = (urlColorIndex % 2 == 1) ? normalStyle : alternateStyle;
+
+            SqlInfo sqlInfo = sqlWithUrl.sqlInfo;
+            createCell(row, 0, String.valueOf(rowNum), style);
+            createCell(row, 1, sqlWithUrl.url, style);
+            createCell(row, 2, sqlInfo.getFileName(), style);
+            createCell(row, 3, sqlInfo.getSqlId(), style);
+            createCell(row, 4, sqlInfo.getType().name(), style);
+            createCell(row, 5, sqlInfo.getTablesAsString(), style);
+            // SQL 파라미터
+            String sqlParams = sqlInfo.getSqlParametersAsString();
+            createCell(row, 6, sqlParams.isEmpty() ? "-" : sqlParams, style);
+            // 쿼리 (전체 표시)
+            String query = sqlInfo.getQuery();
+            createCell(row, 7, query != null ? query : "", style);
 
             rowNum++;
         }
 
         // 열 너비 조정
         sheet.setColumnWidth(0, 5 * 256);   // No
-        sheet.setColumnWidth(1, 20 * 256);  // SQL 파일
-        sheet.setColumnWidth(2, 25 * 256);  // SQL ID
-        sheet.setColumnWidth(3, 10 * 256);  // 타입
-        sheet.setColumnWidth(4, 30 * 256);  // 테이블
-        sheet.setColumnWidth(5, 80 * 256);  // 쿼리
+        sheet.setColumnWidth(1, 25 * 256);  // 호출 URL
+        sheet.setColumnWidth(2, 16 * 256);  // SQL 파일
+        sheet.setColumnWidth(3, 20 * 256);  // SQL ID
+        sheet.setColumnWidth(4, 10 * 256);  // 타입
+        sheet.setColumnWidth(5, 22 * 256);  // 테이블
+        sheet.setColumnWidth(6, 35 * 256);  // SQL 파라미터
+        sheet.setColumnWidth(7, 60 * 256);  // 쿼리
 
         // 필터 추가
         if (rowNum > 1) {
@@ -399,22 +354,35 @@ public class ExcelOutput {
     }
 
     /**
-     * FlowNode에서 SQL 정보 재귀적으로 수집 (중복 제거)
+     * FlowNode에서 SQL 정보 + URL 재귀적으로 수집 (URL별로 수집, 같은 URL 내 중복만 제거)
      */
-    private void collectSqlInfo(FlowNode node, List<SqlInfo> sqlInfoList) {
+    private void collectSqlInfoWithUrl(FlowNode node, String url, List<SqlWithUrl> sqlWithUrlList) {
         if (node.hasSqlInfo()) {
             SqlInfo sqlInfo = node.getSqlInfo();
-            // 중복 체크 (SQL ID 기준)
-            boolean isDuplicate = sqlInfoList.stream()
-                .anyMatch(s -> s.getFullSqlId().equals(sqlInfo.getFullSqlId()));
+            // 같은 URL + 같은 SQL ID 조합만 중복 제거
+            boolean isDuplicate = sqlWithUrlList.stream()
+                .anyMatch(s -> s.url.equals(url) && s.sqlInfo.getFullSqlId().equals(sqlInfo.getFullSqlId()));
             if (!isDuplicate) {
-                sqlInfoList.add(sqlInfo);
+                sqlWithUrlList.add(new SqlWithUrl(url, sqlInfo));
             }
         }
 
         // 자식 노드 처리
         for (FlowNode child : node.getChildren()) {
-            collectSqlInfo(child, sqlInfoList);
+            collectSqlInfoWithUrl(child, url, sqlWithUrlList);
+        }
+    }
+
+    /**
+     * SQL 정보 + 호출 URL 쌍
+     */
+    private static class SqlWithUrl {
+        final String url;
+        final SqlInfo sqlInfo;
+
+        SqlWithUrl(String url, SqlInfo sqlInfo) {
+            this.url = url;
+            this.sqlInfo = sqlInfo;
         }
     }
 
@@ -425,59 +393,62 @@ public class ExcelOutput {
     }
 
     /**
-     * 호출 경로 정보 (평면화 과정에서 사용)
+     * 호출 경로 정보 (평면화 과정에서 사용, 파일명/메소드명 분리, Service 인터페이스/구현체 분리)
      */
     private static class FlowPath {
-        String controller = "";
-        String service = "";
-        String dao = "";
+        String controllerFile = "";
+        String controllerMethod = "";
+        String serviceInterfaceFile = "";  // Service 인터페이스 파일
+        String serviceImplFile = "";       // ServiceImpl 구현체 파일
+        String serviceImplMethod = "";     // ServiceImpl 메소드
+        String daoFile = "";
+        String daoMethod = "";
         String sqlFile = "";
-        String sqlId = "";
-        String tables = "";
-        String query = "";
-        List<String> sqlParams = new ArrayList<>();
 
         FlowPath copy() {
             FlowPath copy = new FlowPath();
-            copy.controller = this.controller;
-            copy.service = this.service;
-            copy.dao = this.dao;
+            copy.controllerFile = this.controllerFile;
+            copy.controllerMethod = this.controllerMethod;
+            copy.serviceInterfaceFile = this.serviceInterfaceFile;
+            copy.serviceImplFile = this.serviceImplFile;
+            copy.serviceImplMethod = this.serviceImplMethod;
+            copy.daoFile = this.daoFile;
+            copy.daoMethod = this.daoMethod;
             copy.sqlFile = this.sqlFile;
-            copy.sqlId = this.sqlId;
-            copy.tables = this.tables;
-            copy.query = this.query;
-            copy.sqlParams = new ArrayList<>(this.sqlParams);
             return copy;
         }
 
         FlatFlowRow toFlatRow() {
-            return new FlatFlowRow(controller, service, dao, sqlFile, sqlId, tables, query, sqlParams);
+            return new FlatFlowRow(controllerFile, controllerMethod,
+                    serviceInterfaceFile, serviceImplFile, serviceImplMethod,
+                    daoFile, daoMethod, sqlFile);
         }
     }
 
     /**
-     * 평면화된 호출 흐름 행
+     * 평면화된 호출 흐름 행 (파일명/메소드명 분리, Service 인터페이스/구현체 분리)
      */
     private static class FlatFlowRow {
-        final String controller;
-        final String service;
-        final String dao;
+        final String controllerFile;
+        final String controllerMethod;
+        final String serviceInterfaceFile;  // Service 인터페이스 파일
+        final String serviceImplFile;       // ServiceImpl 구현체 파일
+        final String serviceImplMethod;     // ServiceImpl 메소드
+        final String daoFile;
+        final String daoMethod;
         final String sqlFile;
-        final String sqlId;
-        final String tables;
-        final String query;
-        final List<String> sqlParams;
 
-        FlatFlowRow(String controller, String service, String dao,
-                   String sqlFile, String sqlId, String tables, String query, List<String> sqlParams) {
-            this.controller = controller;
-            this.service = service;
-            this.dao = dao;
+        FlatFlowRow(String controllerFile, String controllerMethod,
+                   String serviceInterfaceFile, String serviceImplFile, String serviceImplMethod,
+                   String daoFile, String daoMethod, String sqlFile) {
+            this.controllerFile = controllerFile;
+            this.controllerMethod = controllerMethod;
+            this.serviceInterfaceFile = serviceInterfaceFile;
+            this.serviceImplFile = serviceImplFile;
+            this.serviceImplMethod = serviceImplMethod;
+            this.daoFile = daoFile;
+            this.daoMethod = daoMethod;
             this.sqlFile = sqlFile;
-            this.sqlId = sqlId;
-            this.tables = tables;
-            this.query = query;
-            this.sqlParams = sqlParams;
         }
     }
 }

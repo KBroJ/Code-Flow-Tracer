@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE sqlMap PUBLIC "-//iBATIS.com//DTD SQL Map 2.0//EN"
+    "http://www.ibatis.com/dtd/sql-map-2.dtd">
+
+<sqlMap namespace="stockDAO">
+
+    <!-- 재고 조회 -->
+    <select id="selectStock" parameterClass="string" resultClass="stockVO">
+        SELECT
+            PRODUCT_ID,
+            QUANTITY,
+            RESERVED_QTY,
+            (QUANTITY - RESERVED_QTY) AS AVAILABLE_QTY,
+            LAST_UPDATE
+        FROM TB_STOCK
+        WHERE PRODUCT_ID = #productId#
+    </select>
+
+    <!-- 재고 차감 -->
+    <update id="decreaseStock" parameterClass="java.util.Map">
+        UPDATE TB_STOCK
+        SET QUANTITY = QUANTITY - #quantity#,
+            LAST_UPDATE = SYSDATE
+        WHERE PRODUCT_ID = #productId#
+          AND QUANTITY >= #quantity#
+    </update>
+
+    <!-- 재고 증가 (복구) -->
+    <update id="increaseStock" parameterClass="java.util.Map">
+        UPDATE TB_STOCK
+        SET QUANTITY = QUANTITY + #quantity#,
+            LAST_UPDATE = SYSDATE
+        WHERE PRODUCT_ID = #productId#
+    </update>
+
+    <!-- 재고 이력 등록 -->
+    <insert id="insertStockHistory" parameterClass="java.util.Map">
+        INSERT INTO TB_STOCK_HISTORY (
+            HISTORY_ID,
+            PRODUCT_ID,
+            TYPE,
+            QUANTITY,
+            REF_ID,
+            REG_DATE
+        ) VALUES (
+            STOCK_HISTORY_SEQ.NEXTVAL,
+            #productId#,
+            #type#,
+            #quantity#,
+            #refId#,
+            SYSDATE
+        )
+    </insert>
+
+</sqlMap>
