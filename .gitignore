@@ -37,3 +37,6 @@ study/
 
 # Blog drafts (not for git)
 docs/blog/
+
+# Windows reserved name (artifact)
+nul
