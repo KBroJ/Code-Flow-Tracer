@@ -2,7 +2,9 @@ package com.codeflow.analyzer;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 호출 흐름 분석 결과
@@ -24,6 +26,9 @@ public class FlowResult {
     private int daoCount;           // DAO 수
     private int endpointCount;      // 엔드포인트 수
     private int unmappedCallCount;  // 매핑되지 않은 호출 수
+
+    // 다중 구현체 경고: 인터페이스명 → 모든 구현체 목록
+    private Map<String, List<String>> multipleImplWarnings = new HashMap<>();
 
     public FlowResult() {
         this.analyzedAt = LocalDateTime.now();
@@ -113,6 +118,21 @@ public class FlowResult {
 
     public void incrementUnmappedCallCount() {
         this.unmappedCallCount++;
+    }
+
+    public Map<String, List<String>> getMultipleImplWarnings() {
+        return multipleImplWarnings;
+    }
+
+    public void setMultipleImplWarnings(Map<String, List<String>> multipleImplWarnings) {
+        this.multipleImplWarnings = multipleImplWarnings;
+    }
+
+    /**
+     * 다중 구현체 경고가 있는지 확인
+     */
+    public boolean hasMultipleImplWarnings() {
+        return multipleImplWarnings != null && !multipleImplWarnings.isEmpty();
     }
 
     /**
