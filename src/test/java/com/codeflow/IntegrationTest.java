@@ -152,9 +152,9 @@ class IntegrationTest {
         List<ParsedClass> parsedClasses = parser.parseProject(samplesPath);
         FlowResult result = analyzer.analyze(samplesPath, parsedClasses);
 
-        assertEquals(13, result.getTotalClasses(), "전체 클래스 13개");
+        assertEquals(15, result.getTotalClasses(), "전체 클래스 15개 (V2, V3 샘플 포함)");
         assertEquals(2, result.getControllerCount(), "Controller 2개 (User + Order)");
-        assertEquals(4, result.getServiceCount(), "Service 4개 (2 인터페이스 + 2 Impl)");
+        assertEquals(6, result.getServiceCount(), "Service 6개 (2 인터페이스 + 4 Impl)");
         assertEquals(7, result.getDaoCount(), "DAO 7개");
         assertEquals(11, result.getEndpointCount(), "엔드포인트 11개 (User 5 + Order 6)");
     }

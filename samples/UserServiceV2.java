@@ -1,6 +1,7 @@
 package com.example.service;
 
 import com.example.vo.UserVO;
+import org.springframework.stereotype.Service;
 import javax.annotation.Resource;
 import java.util.List;
 import java.util.Map;
@@ -13,6 +14,7 @@ import java.util.Map;
  * - 정적 분석 시 어떤 구현체가 실제로 사용되는지 알 수 없음
  * - 분석 도구는 첫 번째 발견된 구현체(UserServiceImpl)를 사용
  */
+@Service("userServiceV2")
 public class UserServiceV2 implements UserService {
 
     @Resource(name = "userDAO")
