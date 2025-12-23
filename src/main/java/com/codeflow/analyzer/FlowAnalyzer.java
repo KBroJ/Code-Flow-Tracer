@@ -21,6 +21,9 @@ public class FlowAnalyzer {
     // 인터페이스명 → 구현체 클래스명 매핑
     private final Map<String, String> interfaceToImpl = new HashMap<>();
 
+    // 다중 구현체 경고: 인터페이스명 → 모든 구현체 목록 (2개 이상인 경우만)
+    private final Map<String, List<String>> multipleImplWarnings = new HashMap<>();
+
     // scope(변수명) → 클래스명 매핑 (변수명으로 클래스 추정)
     private final Map<String, String> scopeToClassName = new HashMap<>();
 
@@ -70,6 +73,12 @@ public class FlowAnalyzer {
         }
 
         result.setUnmappedCallCount(unmappedCallCount);
+
+        // 5. 다중 구현체 경고 설정
+        if (!multipleImplWarnings.isEmpty()) {
+            result.setMultipleImplWarnings(getMultipleImplWarnings());
+        }
+
         return result;
     }
 
@@ -135,11 +144,19 @@ public class FlowAnalyzer {
      *    - class UserServiceV2 implements UserService → UserService → UserServiceV2
      * 2. "Impl" 접미사 기반 매핑 (fallback)
      *    - UserServiceImpl → UserService → UserServiceImpl
+     *
+     * 다중 구현체 감지:
+     * - 하나의 인터페이스를 여러 클래스가 구현하면 경고 목록에 추가
+     * - 분석에는 첫 번째 발견된 구현체를 사용 (정확도 저하 가능성 있음)
      */
     private void buildInterfaceMapping(List<ParsedClass> parsedClasses) {
         interfaceToImpl.clear();
+        multipleImplWarnings.clear();
 
-        // 1단계: implements 기반 매핑 (가장 정확)
+        // 임시: 인터페이스별 모든 구현체 수집
+        Map<String, List<String>> interfaceToAllImpls = new HashMap<>();
+
+        // 1단계: implements 기반 매핑 - 모든 구현체 수집
         for (ParsedClass clazz : parsedClasses) {
             // 인터페이스는 구현체가 아니므로 스킵
             if (clazz.isInterface()) {
@@ -148,24 +165,44 @@ public class FlowAnalyzer {
 
             // 이 클래스가 구현한 인터페이스들에 대해 매핑
             for (String interfaceName : clazz.getImplementedInterfaces()) {
-                // 이미 매핑이 있으면 스킵 (첫 번째 구현체 우선)
-                if (!interfaceToImpl.containsKey(interfaceName)) {
-                    interfaceToImpl.put(interfaceName, clazz.getClassName());
-                }
+                interfaceToAllImpls.computeIfAbsent(interfaceName, k -> new ArrayList<>())
+                    .add(clazz.getClassName());
             }
         }
 
-        // 2단계: Impl 접미사 기반 매핑 (fallback, implements 매핑이 없는 경우에만)
+        // 2단계: Impl 접미사 기반 매핑 (fallback)
         for (ParsedClass clazz : parsedClasses) {
             String className = clazz.getClassName();
             if (className.endsWith("Impl")) {
                 String interfaceName = className.substring(0, className.length() - 4);
-                // implements 매핑이 없는 경우에만 추가
-                if (!interfaceToImpl.containsKey(interfaceName)) {
-                    interfaceToImpl.put(interfaceName, className);
+                // implements로 이미 매핑된 인터페이스가 아닌 경우에만
+                if (!interfaceToAllImpls.containsKey(interfaceName)) {
+                    interfaceToAllImpls.computeIfAbsent(interfaceName, k -> new ArrayList<>())
+                        .add(className);
                 }
             }
         }
+
+        // 3단계: 첫 번째 구현체 선택 + 다중 구현체 경고 생성
+        for (Map.Entry<String, List<String>> entry : interfaceToAllImpls.entrySet()) {
+            String interfaceName = entry.getKey();
+            List<String> impls = entry.getValue();
+
+            // 첫 번째 구현체를 분석에 사용
+            interfaceToImpl.put(interfaceName, impls.get(0));
+
+            // 2개 이상이면 경고 목록에 추가
+            if (impls.size() > 1) {
+                multipleImplWarnings.put(interfaceName, new ArrayList<>(impls));
+            }
+        }
+    }
+
+    /**
+     * 다중 구현체 경고 목록 반환
+     */
+    public Map<String, List<String>> getMultipleImplWarnings() {
+        return new HashMap<>(multipleImplWarnings);
     }
 
     /**

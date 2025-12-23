@@ -5,6 +5,8 @@ import com.codeflow.analyzer.FlowResult;
 import com.codeflow.parser.SqlInfo;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.ss.util.CellRangeAddress;
+import org.apache.poi.xssf.usermodel.XSSFCellStyle;
+import org.apache.poi.xssf.usermodel.XSSFColor;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 import java.io.FileOutputStream;
@@ -13,6 +15,9 @@ import java.nio.file.Path;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.HashSet;
 
 /**
  * 엑셀 출력 (Apache POI)
@@ -33,6 +38,10 @@ public class ExcelOutput {
     private CellStyle titleStyle;
     private CellStyle normalStyle;
     private CellStyle alternateStyle;  // 줄무늬용 연회색 스타일
+    private CellStyle warningStyle;    // 다중 구현체 경고용 노란색 스타일
+
+    // 다중 구현체 경고 인터페이스 목록
+    private Set<String> warningInterfaces = new HashSet<>();
 
     /**
      * FlowResult를 엑셀 파일로 저장
@@ -44,6 +53,12 @@ public class ExcelOutput {
         try (Workbook workbook = new XSSFWorkbook()) {
             // 스타일 초기화
             initStyles(workbook);
+
+            // 다중 구현체 경고 인터페이스 목록 설정
+            warningInterfaces.clear();
+            if (result.hasMultipleImplWarnings()) {
+                warningInterfaces.addAll(result.getMultipleImplWarnings().keySet());
+            }
 
             // 시트 생성
             createSummarySheet(workbook, result);
@@ -103,6 +118,18 @@ public class ExcelOutput {
         alternateStyle.setBorderRight(BorderStyle.THIN);
         alternateStyle.setWrapText(false);
         alternateStyle.setVerticalAlignment(VerticalAlignment.CENTER);
+
+        // 다중 구현체 경고 스타일 (연한 살구색 배경 - #FFF0E0)
+        warningStyle = workbook.createCellStyle();
+        XSSFColor peachColor = new XSSFColor(new byte[]{(byte)255, (byte)240, (byte)224}, null);
+        ((XSSFCellStyle) warningStyle).setFillForegroundColor(peachColor);
+        warningStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        warningStyle.setBorderBottom(BorderStyle.THIN);
+        warningStyle.setBorderTop(BorderStyle.THIN);
+        warningStyle.setBorderLeft(BorderStyle.THIN);
+        warningStyle.setBorderRight(BorderStyle.THIN);
+        warningStyle.setWrapText(false);
+        warningStyle.setVerticalAlignment(VerticalAlignment.CENTER);
     }
 
     /**
@@ -139,6 +166,49 @@ public class ExcelOutput {
             createSummaryRow(sheet, rowNum++, "매핑 안 된 호출", String.valueOf(result.getUnmappedCallCount()));
         }
 
+        // 다중 구현체 경고가 있으면 설명 섹션 추가
+        if (result.hasMultipleImplWarnings()) {
+            rowNum++; // 빈 줄
+            rowNum++; // 빈 줄
+
+            // 경고 섹션 타이틀
+            Row warningTitleRow = sheet.createRow(rowNum++);
+            Cell warningTitleCell = warningTitleRow.createCell(0);
+            warningTitleCell.setCellValue("[다중 구현체 경고]");
+            warningTitleCell.setCellStyle(titleStyle);
+
+            // 설명
+            Row desc1Row = sheet.createRow(rowNum++);
+            desc1Row.createCell(0).setCellValue("• 하나의 인터페이스에 여러 구현체가 존재합니다");
+
+            Row desc2Row = sheet.createRow(rowNum++);
+            desc2Row.createCell(0).setCellValue("• 정적 분석 한계로 첫 번째 구현체를 선택했으나,");
+
+            Row desc3Row = sheet.createRow(rowNum++);
+            desc3Row.createCell(0).setCellValue("  실제 런타임에서는 다른 구현체가 사용될 수 있습니다");
+
+            Row desc4Row = sheet.createRow(rowNum++);
+            desc4Row.createCell(0).setCellValue("• 해당 항목은 '호출 흐름' 시트에서 살구색으로 표시됩니다");
+
+            rowNum++; // 빈 줄
+
+            // 경고 목록
+            Map<String, List<String>> warnings = result.getMultipleImplWarnings();
+            for (Map.Entry<String, List<String>> entry : warnings.entrySet()) {
+                String interfaceName = entry.getKey();
+                List<String> impls = entry.getValue();
+                String firstImpl = impls.get(0);
+                String others = impls.stream()
+                    .skip(1)
+                    .collect(java.util.stream.Collectors.joining(", "));
+
+                Row warningRow = sheet.createRow(rowNum++);
+                Cell warningCell = warningRow.createCell(0);
+                warningCell.setCellValue("- " + interfaceName + ": " + firstImpl + " 외 " + others);
+                warningCell.setCellStyle(warningStyle);
+            }
+        }
+
         // 열 너비 조정
         sheet.setColumnWidth(0, 20 * 256);
         sheet.setColumnWidth(1, 50 * 256);
@@ -166,7 +236,7 @@ public class ExcelOutput {
                 "Controller 파일", "Controller 메소드",
                 "Service 파일", "ServiceImpl 파일", "ServiceImpl 메소드",
                 "DAO 파일", "DAO 메소드",
-                "SQL 파일"};
+                "SQL 파일", "비고"};
         Row headerRow = sheet.createRow(0);
         for (int i = 0; i < headers.length; i++) {
             Cell cell = headerRow.createCell(i);
@@ -179,7 +249,7 @@ public class ExcelOutput {
         int flowNo = 1;  // URL 그룹 번호 (색상 구분용)
         for (FlowNode flow : result.getFlows()) {
             // 플로우를 평면 행들로 변환
-            List<FlatFlowRow> flatRows = flattenFlow(flow);
+            List<FlatFlowRow> flatRows = flattenFlow(flow, result);
 
             // 호출 단위로 색상 번갈아가며 적용 (홀수: 흰색, 짝수: 연회색)
             CellStyle rowStyle = (flowNo % 2 == 1) ? normalStyle : alternateStyle;
@@ -187,18 +257,22 @@ public class ExcelOutput {
             for (FlatFlowRow flatRow : flatRows) {
                 Row row = sheet.createRow(rowNum);
 
+                // 다중 구현체 경고가 있으면 Service 컬럼에 경고 스타일 적용
+                CellStyle serviceStyle = flatRow.hasMultipleImplWarning ? warningStyle : rowStyle;
+
                 // No는 순차 번호 (rowNum)
                 createCell(row, 0, String.valueOf(rowNum), rowStyle);
                 createCell(row, 1, flow.getHttpMethod() != null ? flow.getHttpMethod() : "", rowStyle);
                 createCell(row, 2, flow.getUrlMapping() != null ? flow.getUrlMapping() : "", rowStyle);
                 createCell(row, 3, flatRow.controllerFile, rowStyle);
                 createCell(row, 4, flatRow.controllerMethod, rowStyle);
-                createCell(row, 5, flatRow.serviceInterfaceFile, rowStyle);
-                createCell(row, 6, flatRow.serviceImplFile, rowStyle);
-                createCell(row, 7, flatRow.serviceImplMethod, rowStyle);
+                createCell(row, 5, flatRow.serviceInterfaceFile, serviceStyle);  // 경고 시 살구색
+                createCell(row, 6, flatRow.serviceImplFile, serviceStyle);       // 경고 시 살구색
+                createCell(row, 7, flatRow.serviceImplMethod, serviceStyle);     // 경고 시 살구색
                 createCell(row, 8, flatRow.daoFile, rowStyle);
                 createCell(row, 9, flatRow.daoMethod, rowStyle);
                 createCell(row, 10, flatRow.sqlFile, rowStyle);
+                createCell(row, 11, flatRow.remarks, flatRow.hasMultipleImplWarning ? serviceStyle : rowStyle);
 
                 rowNum++;
             }
@@ -217,6 +291,7 @@ public class ExcelOutput {
         sheet.setColumnWidth(8, 18 * 256);  // DAO 파일
         sheet.setColumnWidth(9, 18 * 256);  // DAO 메소드
         sheet.setColumnWidth(10, 18 * 256); // SQL 파일
+        sheet.setColumnWidth(11, 35 * 256); // 비고
 
         // 필터 추가
         if (rowNum > 1) {
@@ -227,16 +302,16 @@ public class ExcelOutput {
     /**
      * 트리 구조의 FlowNode를 평면 행 목록으로 변환
      */
-    private List<FlatFlowRow> flattenFlow(FlowNode rootNode) {
+    private List<FlatFlowRow> flattenFlow(FlowNode rootNode, FlowResult result) {
         List<FlatFlowRow> rows = new ArrayList<>();
-        flattenFlowRecursive(rootNode, new FlowPath(), rows);
+        flattenFlowRecursive(rootNode, new FlowPath(), rows, result);
         return rows;
     }
 
     /**
      * 재귀적으로 FlowNode 트리를 평면화 (파일명/메소드명 분리)
      */
-    private void flattenFlowRecursive(FlowNode node, FlowPath currentPath, List<FlatFlowRow> rows) {
+    private void flattenFlowRecursive(FlowNode node, FlowPath currentPath, List<FlatFlowRow> rows, FlowResult result) {
         // 현재 노드의 레이어에 따라 경로 업데이트
         FlowPath newPath = currentPath.copy();
 
@@ -256,7 +331,24 @@ public class ExcelOutput {
                     // 인터페이스 파일 (implementedInterfaces에서 첫 번째 항목)
                     List<String> interfaces = node.getImplementedInterfaces();
                     if (interfaces != null && !interfaces.isEmpty()) {
-                        newPath.serviceInterfaceFile = interfaces.get(0) + ".java";
+                        String interfaceName = interfaces.get(0);
+                        newPath.serviceInterfaceFile = interfaceName + ".java";
+                        // 다중 구현체 경고 체크 및 비고 설정
+                        if (warningInterfaces.contains(interfaceName)) {
+                            newPath.hasMultipleImplWarning = true;
+                            // 비고: 다른 구현체 목록 표시
+                            Map<String, List<String>> warnings = result.getMultipleImplWarnings();
+                            if (warnings.containsKey(interfaceName)) {
+                                List<String> allImpls = warnings.get(interfaceName);
+                                String currentImpl = node.getClassName();
+                                String others = allImpls.stream()
+                                    .filter(impl -> !impl.equals(currentImpl))
+                                    .collect(java.util.stream.Collectors.joining(", "));
+                                if (!others.isEmpty()) {
+                                    newPath.remarks = "외 " + others;
+                                }
+                            }
+                        }
                     }
                     break;
                 case DAO:
@@ -279,7 +371,7 @@ public class ExcelOutput {
         } else {
             // 자식 노드 처리
             for (FlowNode child : node.getChildren()) {
-                flattenFlowRecursive(child, newPath, rows);
+                flattenFlowRecursive(child, newPath, rows, result);
             }
         }
     }
@@ -404,6 +496,8 @@ public class ExcelOutput {
         String daoFile = "";
         String daoMethod = "";
         String sqlFile = "";
+        boolean hasMultipleImplWarning = false;  // 다중 구현체 경고 여부
+        String remarks = "";  // 비고 (다중 구현체 정보 등)
 
         FlowPath copy() {
             FlowPath copy = new FlowPath();
@@ -415,13 +509,15 @@ public class ExcelOutput {
             copy.daoFile = this.daoFile;
             copy.daoMethod = this.daoMethod;
             copy.sqlFile = this.sqlFile;
+            copy.hasMultipleImplWarning = this.hasMultipleImplWarning;
+            copy.remarks = this.remarks;
             return copy;
         }
 
         FlatFlowRow toFlatRow() {
             return new FlatFlowRow(controllerFile, controllerMethod,
                     serviceInterfaceFile, serviceImplFile, serviceImplMethod,
-                    daoFile, daoMethod, sqlFile);
+                    daoFile, daoMethod, sqlFile, hasMultipleImplWarning, remarks);
         }
     }
 
@@ -437,10 +533,13 @@ public class ExcelOutput {
         final String daoFile;
         final String daoMethod;
         final String sqlFile;
+        final boolean hasMultipleImplWarning;  // 다중 구현체 경고 여부
+        final String remarks;  // 비고
 
         FlatFlowRow(String controllerFile, String controllerMethod,
                    String serviceInterfaceFile, String serviceImplFile, String serviceImplMethod,
-                   String daoFile, String daoMethod, String sqlFile) {
+                   String daoFile, String daoMethod, String sqlFile, boolean hasMultipleImplWarning,
+                   String remarks) {
             this.controllerFile = controllerFile;
             this.controllerMethod = controllerMethod;
             this.serviceInterfaceFile = serviceInterfaceFile;
@@ -449,6 +548,8 @@ public class ExcelOutput {
             this.daoFile = daoFile;
             this.daoMethod = daoMethod;
             this.sqlFile = sqlFile;
+            this.hasMultipleImplWarning = hasMultipleImplWarning;
+            this.remarks = remarks;
         }
     }
 }

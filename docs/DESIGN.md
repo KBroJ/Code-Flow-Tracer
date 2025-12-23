@@ -1,6 +1,6 @@
 # 전체 설계 (Architecture)
 
-> 최종 수정일: 2025-12-19
+> 최종 수정일: 2025-12-23
 
 ## 1. 프로젝트 개요
 
@@ -455,3 +455,84 @@ SELECT * FROM ${schemaName}.TB_USER WHERE ...
 - API 호출 시 필요한 파라미터 (Controller) + SQL 실행 시 필요한 파라미터 (SQL)
 - 두 정보 모두 산출물 작성에 유용
 - 분기 파라미터 누락은 인정하되, 실용적 범위에서 최대한 추출
+
+---
+
+## 8. 다중 구현체 경고 기능
+
+### 8.1 배경
+정적 분석에서 인터페이스에 여러 구현체가 있을 경우, 실제 런타임에 어떤 구현체가 주입되는지 알 수 없습니다.
+- Spring 설정 XML/Java Config
+- 프로파일(@Profile)
+- 조건부 빈(@Conditional)
+- 우선순위(@Primary, @Order)
+
+이 도구는 **첫 번째 발견된 구현체**를 사용하므로, 사용자에게 다른 구현체가 존재함을 경고합니다.
+
+### 8.2 구현 방식
+
+```java
+// FlowAnalyzer.java
+private final Map<String, List<String>> multipleImplWarnings = new HashMap<>();
+
+private void buildInterfaceMapping(List<ParsedClass> parsedClasses) {
+    // 1. 모든 구현체 수집
+    Map<String, List<String>> interfaceToAllImpls = new HashMap<>();
+    for (ParsedClass clazz : parsedClasses) {
+        for (String interfaceName : clazz.getImplementedInterfaces()) {
+            interfaceToAllImpls
+                .computeIfAbsent(interfaceName, k -> new ArrayList<>())
+                .add(clazz.getClassName());
+        }
+    }
+
+    // 2. 첫 번째 구현체를 매핑에 사용
+    // 3. 2개 이상이면 경고 목록에 추가
+    for (Map.Entry<String, List<String>> entry : interfaceToAllImpls.entrySet()) {
+        if (entry.getValue().size() > 1) {
+            multipleImplWarnings.put(entry.getKey(), entry.getValue());
+        }
+    }
+}
+```
+
+### 8.3 출력 형식
+
+#### 콘솔 출력
+```
+└─ [Service] UserServiceImpl.selectUserList()  ←UserService  (외 UserServiceV2, UserServiceV3)
+```
+- 현재 사용 중인 구현체(UserServiceImpl) 제외
+- 노란색으로 강조
+
+#### 엑셀 출력
+| 구분 | 내용 |
+|------|------|
+| 강조 색상 | 연한 살구색 (#FFF0E0) |
+| 비고 칼럼 | `외 UserServiceV2, UserServiceV3` |
+| 요약 시트 | 경고 설명 + 인터페이스별 구현체 목록 |
+
+### 8.4 요약 시트 경고 섹션
+```
+[다중 구현체 경고]
+※ 아래 인터페이스는 여러 구현체가 존재합니다.
+※ 정적 분석의 한계로 첫 번째 구현체 기준으로 분석되었습니다.
+※ 실제 런타임에 다른 구현체가 사용될 수 있으니 확인이 필요합니다.
+
+인터페이스         구현체
+UserService       UserServiceImpl, UserServiceV2, UserServiceV3
+```
+
+### 8.5 설계 결정 이유
+
+1. **해결보다 경고 선택**
+   - 어떤 구현체가 실제로 사용되는지 판별하려면 Spring 설정 파싱 필요
+   - 복잡도 대비 가치가 낮음 → 경고로 사용자가 확인하도록 유도
+
+2. **인라인 표시 선택**
+   - 처음 시도: 상단에 요약 경고 → 어떤 Service인지 파악 어려움
+   - 최종: 해당 Service 노드 옆에 표시 → 직관적
+
+3. **비고 칼럼 + 요약 시트 조합**
+   - 비고: 간결하게 다른 구현체 목록
+   - 요약: 처음 보는 사용자를 위한 상세 설명

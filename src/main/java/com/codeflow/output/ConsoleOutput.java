@@ -11,7 +11,10 @@ import java.io.PrintStream;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 콘솔 출력 포맷터
@@ -52,6 +55,9 @@ public class ConsoleOutput {
     private final boolean useColors;
     private OutputStyle style;
 
+    // 다중 구현체 경고: 인터페이스명 → 구현체 목록 (print 시 설정)
+    private Map<String, List<String>> multipleImplWarnings = new HashMap<>();
+
     /**
      * 출력 스타일
      */
@@ -83,6 +89,12 @@ public class ConsoleOutput {
      * 전체 분석 결과 출력
      */
     public void print(FlowResult result) {
+        // 다중 구현체 경고 정보 설정
+        multipleImplWarnings.clear();
+        if (result.hasMultipleImplWarnings()) {
+            multipleImplWarnings.putAll(result.getMultipleImplWarnings());
+        }
+
         printHeader(result);
         printSummary(result);
         printFlows(result);
@@ -292,10 +304,25 @@ public class ConsoleOutput {
                 }
             }
 
-            // 구현 인터페이스 정보 (← InterfaceName)
+            // 구현 인터페이스 정보 (← InterfaceName) + 다중 구현체 경고
             if (node.hasImplementedInterface()) {
+                String interfaceName = node.getPrimaryInterface();
                 line.append("  ");
-                line.append(color("← " + node.getPrimaryInterface(), GRAY));
+                line.append(color("← " + interfaceName, GRAY));
+
+                // 다중 구현체 경고 표시: (외 OtherImpl1, OtherImpl2)
+                if (multipleImplWarnings.containsKey(interfaceName)) {
+                    List<String> allImpls = multipleImplWarnings.get(interfaceName);
+                    String currentImpl = node.getClassName();
+                    // 현재 구현체 제외한 나머지
+                    String others = allImpls.stream()
+                        .filter(impl -> !impl.equals(currentImpl))
+                        .collect(Collectors.joining(", "));
+                    if (!others.isEmpty()) {
+                        line.append("  ");
+                        line.append(color("(외 " + others + ")", YELLOW));
+                    }
+                }
             }
 
         }
