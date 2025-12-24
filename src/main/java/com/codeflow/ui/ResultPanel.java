@@ -7,6 +7,8 @@ import com.codeflow.parser.SqlInfo;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.MouseWheelEvent;
+import java.awt.event.MouseWheelListener;
 import java.util.List;
 import java.util.Map;
 
@@ -19,6 +21,7 @@ import java.util.Map;
 public class ResultPanel extends JPanel {
 
     private JEditorPane resultPane;
+    private JScrollPane scrollPane;
 
     // 레이어별 색상 (다크 테마용 - VS Code 터미널 참고)
     private static final String COLOR_CONTROLLER = "#4EC9B0";  // 청록 (밝음)
@@ -37,6 +40,14 @@ public class ResultPanel extends JPanel {
     // 다중 구현체 경고 정보
     private Map<String, List<String>> multipleImplWarnings = new java.util.HashMap<>();
 
+    // 폰트 크기 (Ctrl+휠로 조절)
+    private int fontSize = 13;
+    private static final int MIN_FONT_SIZE = 9;
+    private static final int MAX_FONT_SIZE = 24;
+
+    // 현재 결과 캐시 (폰트 크기 변경 시 다시 렌더링용)
+    private FlowResult cachedResult;
+
     public ResultPanel() {
         setLayout(new BorderLayout());
         initializePane();
@@ -50,9 +61,47 @@ public class ResultPanel extends JPanel {
         resultPane.setContentType("text/html");
         resultPane.setEditable(false);
         resultPane.putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, Boolean.TRUE);
-        resultPane.setFont(new Font("Malgun Gothic", Font.PLAIN, 13));
+        resultPane.setFont(new Font("Malgun Gothic", Font.PLAIN, fontSize));
+        resultPane.getCaret().setVisible(false);  // 커서(|) 숨기기
+        resultPane.setFocusable(true);  // Ctrl+휠 이벤트 수신을 위해 활성화
 
-        add(new JScrollPane(resultPane), BorderLayout.CENTER);
+        scrollPane = new JScrollPane(resultPane);
+        scrollPane.setBorder(BorderFactory.createEmptyBorder());  // 테두리 제거
+        add(scrollPane, BorderLayout.CENTER);
+
+        // Ctrl+마우스휠로 폰트 크기 조절
+        resultPane.addMouseWheelListener(new MouseWheelListener() {
+            @Override
+            public void mouseWheelMoved(MouseWheelEvent e) {
+                if (e.isControlDown()) {
+                    int rotation = e.getWheelRotation();
+                    if (rotation < 0) {
+                        // 휠 위로 = 확대
+                        changeFontSize(1);
+                    } else {
+                        // 휠 아래로 = 축소
+                        changeFontSize(-1);
+                    }
+                    e.consume();
+                } else {
+                    // Ctrl 없으면 기본 스크롤
+                    scrollPane.dispatchEvent(e);
+                }
+            }
+        });
+    }
+
+    /**
+     * 폰트 크기 변경
+     */
+    private void changeFontSize(int delta) {
+        int newSize = fontSize + delta;
+        if (newSize >= MIN_FONT_SIZE && newSize <= MAX_FONT_SIZE) {
+            fontSize = newSize;
+            if (cachedResult != null) {
+                displayResult(cachedResult, currentStyle);
+            }
+        }
     }
 
     // 트리 출력용 문자 (CLI와 동일)
@@ -67,23 +116,19 @@ public class ResultPanel extends JPanel {
     public void displayResult(FlowResult result, String style) {
         this.currentStyle = style != null ? style : "normal";
         this.multipleImplWarnings = result.getMultipleImplWarnings();
+        this.cachedResult = result;  // 폰트 크기 변경 시 다시 렌더링용
 
         StringBuilder html = new StringBuilder();
         html.append("<html><head><style>");
-        html.append("body { font-family: 'D2Coding', 'Consolas', 'Malgun Gothic', monospace; font-size: 13px; ");
+        html.append("body { font-family: 'D2Coding', 'Consolas', 'Malgun Gothic', monospace; font-size: ").append(fontSize).append("px; ");
         html.append("margin: 10px; background-color: #1E1E1E; color: #D4D4D4; line-height: 1.4; }");
         html.append("pre { font-family: inherit; margin: 0; white-space: pre-wrap; }");
         html.append("</style></head><body><pre>");
 
-        // 헤더 박스
-        appendHeader(html);
-
-        // 요약 정보
-        appendSummary(html, result);
-
         // 다중 구현체 경고
         if (result.hasMultipleImplWarnings()) {
             appendWarnings(html, result.getMultipleImplWarnings());
+            html.append("\n");  // 경고와 호출 흐름 사이 여백
         }
 
         // 호출 흐름 섹션
@@ -96,20 +141,6 @@ public class ResultPanel extends JPanel {
 
         resultPane.setText(html.toString());
         resultPane.setCaretPosition(0);
-    }
-
-    /**
-     * 헤더 박스 추가 (HTML table로 정렬 보장)
-     */
-    private void appendHeader(StringBuilder html) {
-        // pre 태그 임시 종료 후 table 사용, 다시 pre 시작
-        html.append("</pre>");
-        html.append("<table style='border-collapse: collapse; color: #4EC9B0; font-family: inherit; margin: 10px 0;'>");
-        html.append("<tr><td style='border: 1px solid #4EC9B0; padding: 8px 40px; text-align: center;'>");
-        html.append("Code Flow Tracer - 호출 흐름 분석 결과");
-        html.append("</td></tr>");
-        html.append("</table>");
-        html.append("<pre>");
     }
 
     /**
@@ -128,7 +159,7 @@ public class ResultPanel extends JPanel {
 
         List<FlowNode> flows = result.getFlows();
         if (flows.isEmpty()) {
-            html.append(colorize("  (분석된 엔드포인트가 없습니다)", COLOR_INTERFACE)).append("\n\n");
+            html.append(colorize("  (분석된 URL이 없습니다)", COLOR_INTERFACE)).append("\n\n");
             return;
         }
 
@@ -153,52 +184,26 @@ public class ResultPanel extends JPanel {
     }
 
     /**
-     * 요약 정보 추가 (CLI 스타일)
-     */
-    private void appendSummary(StringBuilder html, FlowResult result) {
-        html.append(colorize("[ 분석 요약 ]", COLOR_WARNING_HEADER)).append("\n\n");
-
-        // 프로젝트 경로
-        html.append("  ").append(colorize("프로젝트:", COLOR_INTERFACE)).append(" ");
-        html.append(escapeHtml(result.getProjectPath().toString())).append("\n");
-
-        // 분석 시간
-        java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-        html.append("  ").append(colorize("분석 시간:", COLOR_INTERFACE)).append(" ");
-        html.append(result.getAnalyzedAt().format(formatter)).append("\n\n");
-
-        // 통계 테이블
-        html.append("  ").append(repeat("─", 30)).append("\n");
-        html.append(String.format("  %-15s ", "전체 클래스:"));
-        html.append(colorize(result.getTotalClasses() + "개", COLOR_SUMMARY)).append("\n");
-
-        html.append(String.format("    %-13s ", "Controller:"));
-        html.append(colorize(result.getControllerCount() + "개", COLOR_CONTROLLER)).append("\n");
-
-        html.append(String.format("    %-13s ", "Service:"));
-        html.append(colorize(result.getServiceCount() + "개", COLOR_SERVICE)).append("\n");
-
-        html.append(String.format("    %-13s ", "DAO:"));
-        html.append(colorize(result.getDaoCount() + "개", COLOR_DAO)).append("\n");
-
-        html.append("  ").append(repeat("─", 30)).append("\n");
-        html.append(String.format("  %-15s ", "엔드포인트:"));
-        html.append(colorize(result.getEndpointCount() + "개", COLOR_CONTROLLER)).append("\n\n");
-    }
-
-    /**
-     * 다중 구현체 경고 추가
+     * 다중 구현체 경고 추가 (트리 형식)
      */
     private void appendWarnings(StringBuilder html, Map<String, List<String>> warnings) {
         html.append("\n<b style='color:").append(COLOR_WARNING_HEADER).append("'>");
-        html.append(String.format("[경고] %d개 인터페이스에 다중 구현체 존재", warnings.size()));
-        html.append("</b>\n");
+        html.append(String.format("[경고] %d개 인터페이스에 다중 구현체 존재 - 확인필요", warnings.size()));
+        html.append("</b>\n\n");
 
         for (Map.Entry<String, List<String>> entry : warnings.entrySet()) {
-            html.append("<span style='color:").append(COLOR_WARNING_HEADER).append("'>  ");
-            html.append(escapeHtml(entry.getKey())).append(": ");
-            html.append(escapeHtml(String.join(", ", entry.getValue())));
-            html.append("</span>\n");
+            // 인터페이스명 (연결선 없이)
+            html.append("  ");
+            html.append(colorize(escapeHtml(entry.getKey()), COLOR_INTERFACE)).append("\n");
+
+            // 구현체 목록
+            List<String> impls = entry.getValue();
+            for (int i = 0; i < impls.size(); i++) {
+                boolean isLastImpl = (i == impls.size() - 1);
+                String implConnector = isLastImpl ? TREE_LAST : TREE_BRANCH;
+                html.append(colorize("  " + implConnector, COLOR_WARNING_HEADER));
+                html.append(colorize(escapeHtml(impls.get(i)), COLOR_WARNING_HEADER)).append("\n");
+            }
         }
     }
 
@@ -372,7 +377,7 @@ public class ResultPanel extends JPanel {
     private String getHttpMethodColor(String method) {
         if (method == null) return COLOR_INTERFACE;
         switch (method) {
-            case "GET": return COLOR_CONTROLLER;  // 청록
+            case "GET": return "#98C379";  // 밝은 초록 (URL 색상과 구분)
             case "POST": return COLOR_WARNING_HEADER;  // 노랑
             case "PUT": return COLOR_SERVICE;  // 파랑
             case "DELETE": return COLOR_WARNING;  // 빨강
@@ -428,6 +433,41 @@ public class ResultPanel extends JPanel {
      */
     public void clear() {
         resultPane.setText("");
+    }
+
+    /**
+     * 특정 엔드포인트로 스크롤 (URL로 검색)
+     * @param url 엔드포인트 URL
+     */
+    public void scrollToEndpoint(String url) {
+        if (url == null || url.isEmpty()) return;
+
+        try {
+            String text = resultPane.getDocument().getText(0, resultPane.getDocument().getLength());
+            // URL 패턴으로 해당 엔드포인트 위치 찾기 (예: "[GET] /order/list.do" 또는 그냥 URL)
+            int pos = text.indexOf("] " + url);
+            if (pos < 0) {
+                pos = text.indexOf(url);
+            }
+
+            if (pos >= 0) {
+                // 해당 섹션의 시작 부분(구분선) 찾기
+                int sectionStart = text.lastIndexOf("───", pos);
+                if (sectionStart >= 0) {
+                    pos = sectionStart;
+                }
+
+                // 해당 위치의 Y 좌표를 구해서 스크롤 뷰포트 상단에 위치시킴
+                Rectangle rect = resultPane.modelToView(pos);
+                if (rect != null) {
+                    JViewport viewport = scrollPane.getViewport();
+                    // 강제로 해당 위치를 뷰포트 상단에 배치
+                    viewport.setViewPosition(new Point(0, rect.y));
+                }
+            }
+        } catch (Exception e) {
+            // 스크롤 실패 시 무시
+        }
     }
 
     /**

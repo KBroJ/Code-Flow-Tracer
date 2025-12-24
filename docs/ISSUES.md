@@ -829,6 +829,113 @@ private void appendHeader(StringBuilder html) {
 - 박스 문자 정렬이 필요하면 HTML에서는 `<table>` 또는 CSS Grid 사용이 확실함
 - CLI 출력을 그대로 GUI로 옮기는 것은 한계가 있음 → 각 환경에 맞는 방식 선택 필요
 
+### Issue #013: JSplitPane 내부 컴포넌트 가시성 제어 문제
+
+**발생일**: 2025-12-25
+**상태**: ✅ 해결
+
+#### 문제 상황
+- 분석 완료 후 좌측 URL 목록 패널이 나타나지 않음
+- `setVisible(false)` / `setVisible(true)` 호출해도 효과 없음
+
+#### 원인 분석
+- `JSplitPane` 내부의 컴포넌트에서 `setVisible(false)`를 호출하면:
+  - 컴포넌트가 보이지 않게 되지만 **공간은 그대로 차지**
+  - 또는 `JSplitPane`이 레이아웃을 재조정하지 않음
+- `JSplitPane`은 visibility가 아닌 **divider 위치**로 패널 크기를 제어하도록 설계됨
+
+#### 시도한 해결책
+1. `setVisible(false)` → 효과 없음
+2. `setSize(0, height)` → 부분적 효과
+3. `setDividerLocation(0)` → ✅ 정상 동작
+
+#### 최종 해결
+```java
+// 숨기기 (분석 전)
+mainSplitPane.setDividerLocation(0);
+
+// 표시하기 (분석 후)
+mainSplitPane.setDividerLocation(ENDPOINT_PANEL_WIDTH);  // 예: 250
+```
+
+- `setDividerLocation(0)`: 좌측 패널 폭이 0이 되어 사실상 숨김
+- `setDividerLocation(width)`: 좌측 패널이 지정 폭으로 표시됨
+
+#### 배운 점
+- `JSplitPane`은 visibility 대신 divider 위치로 패널 표시/숨김 제어
+- Swing 레이아웃 매니저는 컴포넌트별로 동작 방식이 다름
+- 컴포넌트 문서에서 권장하는 방식을 확인하는 것이 중요
+
+---
+
+### Issue #014: 분석 요약 레이아웃 정렬 문제
+
+**발생일**: 2025-12-25
+**상태**: ✅ 해결
+
+#### 문제 상황
+GUI 분석 요약 섹션에서:
+1. 라벨과 개수 값 사이 간격이 너무 넓음 (GridLayout 사용 시)
+2. 가운데 정렬하면 타이틀/구분선과 정렬 불일치
+3. 오른쪽 빈 공간이 어색함
+
+```
+[ 분석 요약 ]
+  클래스:                                         4개    ← 간격 너무 넓음
+  Controller:                                     1개
+```
+
+#### 원인 분석
+- 다른 섹션(프로젝트 경로, 옵션)은 가로 전체 폭 사용
+- 분석 요약만 좁은 내용 → 오른쪽 여백 발생
+- 라벨-값 사이를 어떻게 채울 것인가?
+
+#### 시도한 해결책
+
+1. **GridLayout** → 간격이 너무 넓어짐 ❌
+2. **가운데 정렬** → 타이틀/구분선과 불일치 ❌
+3. **Leader Dots (점선 리더)** → ✅ 채택
+
+#### 최종 해결
+커스텀 `JPanel`로 점선 리더 구현:
+
+```java
+private JPanel createSummaryRow(JLabel label, JLabel valueLabel) {
+    JPanel row = new JPanel(new BorderLayout(4, 0));
+    row.add(label, BorderLayout.WEST);
+
+    // 점선 리더 (가운데 채우기)
+    JPanel dotsPanel = new JPanel() {
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            g.setColor(new Color(150, 150, 150));  // 다크 테마에 맞는 밝기
+            int y = getHeight() / 2;
+            for (int x = 4; x < getWidth() - 4; x += 6) {
+                g.fillOval(x, y, 2, 2);  // 2px 원형 점
+            }
+        }
+    };
+    dotsPanel.setOpaque(false);
+    row.add(dotsPanel, BorderLayout.CENTER);
+
+    row.add(valueLabel, BorderLayout.EAST);
+    return row;
+}
+```
+
+**결과:**
+```
+[ 분석 요약 ]
+  클래스: .......................... 4개
+  Controller: ...................... 1개
+```
+
+#### 배운 점
+- `paintComponent()` 오버라이드로 간단한 커스텀 UI 요소 구현 가능
+- Leader dots는 Word/Excel 목차에서 익숙한 패턴
+- 다크 테마에서는 점선 색상도 배경과 대비되게 조절 필요 (150,150,150 사용)
+
 ---
 
 ## 미해결/진행중 문제
