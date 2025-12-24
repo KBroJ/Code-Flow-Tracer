@@ -75,7 +75,7 @@ java -jar code-flow-tracer.jar -p /path/to/project -s detailed
 | **콘솔 출력** | 트리 형태 + ANSI 색상 지원 | ✅ 완료 |
 | **엑셀 출력** | 호출 흐름 + SQL 목록 시트 | ✅ 완료 |
 | **마크다운 출력** | 문서화용 출력 형식 | ⏳ 예정 |
-| **Desktop GUI** | Swing 기반, JAR 더블클릭 실행 | ⏳ 예정 |
+| **Desktop GUI** | Swing 기반, JAR 더블클릭 실행 | ✅ 완료 |
 | **전자정부프레임워크** | 레거시 SI 환경 특화 지원 | ✅ 지원 |
 
 ---
@@ -111,8 +111,13 @@ java -jar code-flow-tracer.jar -p /path/to/project --excel -o result.xlsx
 # 출력 스타일 지정 (compact, normal, detailed)
 java -jar code-flow-tracer.jar -p /path/to/project -s detailed
 
-# GUI 모드
+# GUI 모드 (콘솔 창 포함)
 java -jar code-flow-tracer.jar --gui
+
+# GUI 모드 (콘솔 창 없이, 권장)
+javaw -jar code-flow-tracer.jar --gui
+
+# 또는 scripts/run.bat 더블클릭
 ```
 
 ---
@@ -158,7 +163,7 @@ code-flow-tracer/
 │   │   ├── parser/          # 소스 코드 파싱 ✅
 │   │   ├── analyzer/        # 흐름 분석 ✅
 │   │   ├── output/          # 출력 (콘솔 ✅, 엑셀 ✅)
-│   │   └── ui/              # Swing GUI (⏳ 예정)
+│   │   └── ui/              # Swing GUI ✅
 │   └── test/java/
 └── samples/                  # 테스트용 샘플 코드
 ```

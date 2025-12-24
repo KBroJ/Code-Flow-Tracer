@@ -623,6 +623,147 @@ private String mergeParameters(Set<String> controllerParams, List<String> sqlPar
 - 정규식으로 SQL에서 파라미터 추출하는 패턴 학습
 - 사용자 관점에서 "어떤 정보가 필요한가" 고민 필요
 
+### Issue #009: Swing GUI에서 한글 깨짐
+
+**발생일**: 2025-12-24
+**상태**: ✅ 해결
+
+#### 문제 상황
+Swing GUI에서 분석 결과 표시 시 한글이 네모(□)로 깨져서 표시됨
+```
+분석 요약: 11개 엔드포인트... → □□ □□: 11□ □□□□□...
+```
+
+- JTree에서 한글 텍스트가 모두 깨짐
+- 복사해서 메모장에 붙여넣으면 정상 출력
+
+#### 원인 분석
+- `ResultPanel.java`에서 `Consolas` 폰트 사용
+- `Consolas`는 영문 고정폭 폰트로 **한글 글리프가 없음**
+- Java Swing은 폰트에 없는 문자를 □(tofu)로 표시
+- 클립보드 복사는 문자 데이터만 복사하므로 폰트와 무관하게 정상
+
+```java
+// 문제 코드
+resultTree.setFont(new Font("Consolas", Font.PLAIN, 13));
+```
+
+#### 해결 방법
+
+**한글 지원 폰트로 변경**:
+```java
+// 수정 후
+resultTree.setFont(new Font("Malgun Gothic", Font.PLAIN, 13));
+```
+
+**대안 폰트 옵션**:
+| 폰트명 | 특징 |
+|--------|------|
+| Malgun Gothic (맑은 고딕) | Windows 기본, 한글 지원 |
+| D2Coding | 개발용, 한글 고정폭 |
+| NanumGothicCoding | 한글 고정폭 |
+| Dialog | Java 기본, 다국어 지원 |
+
+#### 배운 점
+- Swing 폰트 선택 시 다국어(한글) 지원 여부 확인 필요
+- 영문 전용 폰트(Consolas, Monaco, Menlo 등)는 한글 표시 불가
+- 폰트 fallback은 OS 설정에 따라 다르게 동작
+- 국제화(i18n) 고려 시 시스템 기본 폰트나 다국어 폰트 사용 권장
+
+---
+
+### Issue #010: GUI 텍스트 드래그 선택 불가
+
+**발생일**: 2025-12-24
+**상태**: ✅ 해결
+
+#### 문제 상황
+- GUI 결과 패널에서 텍스트 드래그 선택이 불가능
+- 사용자가 결과 일부를 복사하려면 우클릭 메뉴나 전체 복사만 가능
+- 일반 텍스트 에디터처럼 자유로운 드래그 선택 요청
+
+#### 원인 분석
+- 기존 구현: `JTree` + `DefaultTreeCellRenderer`
+- `JTree`는 노드 단위 선택만 지원, 텍스트 부분 선택 불가
+- 트리 구조 시각화에는 좋지만 텍스트 복사 UX가 불편
+
+**시도한 방법들**:
+1. `JTextPane` + `StyledDocument` → 드래그 여전히 안 됨
+2. `DefaultCaret.setSelectionVisible(true)` → 효과 없음
+3. `setDragEnabled(true)` → 효과 없음
+
+#### 최종 해결
+
+**`JEditorPane` + HTML 방식으로 완전히 변경**:
+```java
+// ResultPanel.java
+private JEditorPane resultPane;
+
+private void initializePane() {
+    resultPane = new JEditorPane();
+    resultPane.setContentType("text/html");  // HTML 렌더링
+    resultPane.setEditable(false);
+    // ...
+}
+
+public void displayResult(FlowResult result, String style) {
+    StringBuilder html = new StringBuilder();
+    html.append("<html><body><pre>");
+    // HTML 태그로 색상 적용
+    html.append("<span style='color:#009600'>[Controller] ...</span>");
+    // ...
+    resultPane.setText(html.toString());
+}
+```
+
+**장점**:
+- 텍스트 드래그 선택 완벽 지원
+- HTML 스타일로 색상 유지 (Controller: 녹색, Service: 파랑 등)
+- Ctrl+C 복사 기본 지원
+
+#### 배운 점
+- `JTree`는 구조 탐색용, 텍스트 선택 UX에는 부적합
+- `JEditorPane` + HTML이 색상 + 텍스트 선택 조합에 최적
+- Swing 컴포넌트 선택 시 사용 목적(탐색 vs 복사)을 먼저 고려
+
+---
+
+### Issue #011: GUI 창 닫아도 프로세스 종료 안 됨
+
+**발생일**: 2025-12-24
+**상태**: ✅ 해결
+
+#### 문제 상황
+- GUI 창을 X 버튼으로 닫아도 Java 프로세스가 계속 남아있음
+- 작업 관리자에서 확인하면 java.exe 프로세스 존재
+- 여러 번 실행하면 프로세스가 누적됨
+
+#### 원인 분석
+- `setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE)` 설정되어 있음
+- 하지만 `SwingWorker` 백그라운드 스레드가 실행 중이면 JVM이 종료되지 않을 수 있음
+- `EXIT_ON_CLOSE`는 모든 non-daemon 스레드가 종료되어야 JVM 종료
+
+#### 최종 해결
+
+**`WindowListener`로 명시적 `System.exit()` 호출**:
+```java
+// MainFrame.java - initializeFrame()
+addWindowListener(new java.awt.event.WindowAdapter() {
+    @Override
+    public void windowClosing(java.awt.event.WindowEvent e) {
+        System.exit(0);  // 강제 종료
+    }
+});
+```
+
+- 창이 닫힐 때 `System.exit(0)` 명시적 호출
+- 백그라운드 스레드 상태와 관계없이 즉시 종료
+
+#### 배운 점
+- `EXIT_ON_CLOSE`만으로는 모든 상황에서 프로세스 종료가 보장되지 않음
+- `SwingWorker`나 다른 백그라운드 스레드가 있으면 명시적 종료 필요
+- 사용자 입장에서 "창 닫기 = 프로세스 종료"가 직관적
+
 ---
 
 ## 미해결/진행중 문제

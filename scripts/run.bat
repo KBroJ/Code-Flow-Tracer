@@ -15,12 +15,12 @@ chcp 65001 > nul 2>&1
 cd /d "%~dp0\.."
 
 REM 번들 JDK가 있으면 사용, 없으면 시스템 Java 사용
-if exist "jdk\bin\java.exe" (
-    set JAVA_CMD=jdk\bin\java.exe
+REM javaw 사용: 콘솔 창 없이 GUI만 실행
+if exist "jdk\bin\javaw.exe" (
+    set JAVA_CMD=jdk\bin\javaw.exe
 ) else (
-    set JAVA_CMD=java
+    set JAVA_CMD=javaw
 )
 
-%JAVA_CMD% -jar build\libs\code-flow-tracer.jar --gui
-
-pause
+REM start 명령으로 배치 파일 창도 즉시 닫힘
+start "" %JAVA_CMD% -jar build\libs\code-flow-tracer.jar --gui

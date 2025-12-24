@@ -9,6 +9,7 @@ import com.codeflow.parser.IBatisParser;
 import com.codeflow.parser.JavaSourceParser;
 import com.codeflow.parser.ParsedClass;
 import com.codeflow.parser.SqlInfo;
+import com.codeflow.ui.MainFrame;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -49,7 +50,7 @@ public class Main implements Callable<Integer> {
     private static final String DEFAULT_OUTPUT_DIR = "output";
     private static final String DEFAULT_EXCEL_FILENAME = "code-flow-result.xlsx";
 
-    @Option(names = {"-p", "--path"}, description = "분석할 프로젝트 경로 (필수)", required = true)
+    @Option(names = {"-p", "--path"}, description = "분석할 프로젝트 경로 (CLI 모드에서 필수)")
     private Path projectPath;
 
     @Option(names = {"-u", "--url"}, description = "URL 패턴 필터 (예: /api/user/*)")
@@ -74,6 +75,15 @@ public class Main implements Callable<Integer> {
     private boolean excelOutput;
 
     public static void main(String[] args) {
+        // GUI 모드 체크 (--gui 옵션이 있으면 GUI 실행 후 System.exit 호출 안 함)
+        boolean isGuiMode = false;
+        for (String arg : args) {
+            if ("--gui".equals(arg)) {
+                isGuiMode = true;
+                break;
+            }
+        }
+
         // 스마트 인코딩 감지로 출력 스트림 설정
         PrintStream smartOut = getSmartOutputStream();
 
@@ -81,7 +91,12 @@ public class Main implements Callable<Integer> {
         cmd.setOut(new PrintWriter(smartOut, true));
         cmd.setErr(new PrintWriter(smartOut, true));
         int exitCode = cmd.execute(args);
-        System.exit(exitCode);
+
+        // GUI 모드가 아닐 때만 System.exit 호출
+        // (GUI 모드에서는 창이 열린 상태로 유지되어야 함)
+        if (!isGuiMode) {
+            System.exit(exitCode);
+        }
     }
 
     /**
@@ -107,8 +122,15 @@ public class Main implements Callable<Integer> {
     public Integer call() {
         // GUI 모드
         if (guiMode) {
-            System.out.println("GUI 모드는 아직 구현 중입니다. (Week 3 예정)");
+            MainFrame.launch();
             return 0;
+        }
+
+        // CLI 모드에서 경로 필수 검사
+        if (projectPath == null) {
+            System.err.println("오류: 프로젝트 경로를 지정하세요. (예: -p /path/to/project)");
+            System.err.println("GUI 모드를 사용하려면: --gui");
+            return 1;
         }
 
         // 경로 유효성 검사
