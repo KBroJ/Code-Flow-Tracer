@@ -1,6 +1,6 @@
 # 할 일 목록 (TODO)
 
-> 최종 수정일: 2025-12-23
+> 최종 수정일: 2025-12-24
 
 ## 진행 상태 범례
 - ✅ 완료
@@ -115,18 +115,24 @@
 
 ---
 
-## Week 3: GUI + 테스트 ⏳
+## Week 3: GUI + 테스트 🔄
 
-### Swing GUI
-- [ ] Swing GUI 기본 프레임
-- [ ] 프로젝트 경로 선택 (JFileChooser)
-- [ ] 분석 옵션 UI
-- [ ] 결과 표시 패널 (JTree 또는 JTextArea)
+### 2025-12-24 (화) - Session 12 ✅
+**Swing GUI 구현**
+- [x] Swing GUI 기본 프레임 (MainFrame.java)
+- [x] 프로젝트 경로 선택 (JFileChooser)
+- [x] 분석 옵션 UI (URL 필터, 출력 스타일)
+- [x] 결과 표시 패널 (ResultPanel.java - JEditorPane + HTML)
+- [x] GUI ↔ Core 연동 (SwingWorker)
+- [x] 진행 상태 표시 (ProgressBar)
+- [x] 엑셀 저장 기능
 
-### GUI 연동
-- [ ] GUI ↔ Core 연동
-- [ ] 진행 상태 표시 (ProgressBar)
-- [ ] 결과 저장 기능
+**GUI 개선**
+- [x] 텍스트 드래그 선택 가능 (JTree → JEditorPane + HTML 변경)
+- [x] 색상 구분 유지 (Controller: 녹색, Service: 파랑, DAO: 보라, SQL: 주황)
+- [x] 다중 구현체 경고 표시 (빨강 + 굵게)
+- [x] 창 닫을 때 프로세스 종료 문제 해결 (WindowListener 추가)
+- [x] run.bat 개선 (javaw 사용 → 콘솔 창 없이 GUI만 실행)
 
 ### 실제 테스트
 - [ ] egovframe-simple-homepage-template 클론
@@ -205,6 +211,9 @@
 |----|------|------|--------|
 | #1 | 미사용 import로 인한 컴파일 에러 | ✅ 해결 | 2025-12-17 |
 | #7 | 순환참조 오탐 (같은 메서드 다른 경로 호출 시 [순환참조] 표시) | ✅ 해결 | 2025-12-18 |
+| #9 | GUI 한글 깨짐 (Consolas 폰트 → Malgun Gothic) | ✅ 해결 | 2025-12-24 |
+| #10 | GUI 텍스트 드래그 선택 불가 (JTree → JEditorPane + HTML) | ✅ 해결 | 2025-12-24 |
+| #11 | GUI 창 닫아도 프로세스 종료 안 됨 (WindowListener 추가) | ✅ 해결 | 2025-12-24 |
 
 ---
 

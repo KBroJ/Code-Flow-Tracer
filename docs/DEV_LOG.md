@@ -738,10 +738,10 @@ Week 4: 개선 + 회고     ░░░░░░░░░░░░░░░░░�
 - ✅ Windows 한글 인코딩 지원
 - ✅ README 데모 섹션 (스크린샷)
 - ✅ 다중 구현체 경고 (콘솔 + 엑셀)
+- ✅ Swing GUI (프로젝트 선택, 분석 실행, 결과 트리 표시)
 
 ### 예정된 기능
 - ⏳ 마크다운 출력
-- ⏳ Swing GUI
 
 ---
 
@@ -796,3 +796,83 @@ Week 4: 개선 + 회고     ░░░░░░░░░░░░░░░░░�
 - 정적 분석 도구는 한계를 명확히 알리는 것이 중요
 - 경고 위치가 UX에 큰 영향을 미침 (상단 vs 인라인)
 - Apache POI에서 XSSFColor로 사용자 정의 색상 설정하는 방법
+
+---
+
+### 2025-12-24 (화)
+
+#### Session 12: Swing GUI 구현
+
+**오늘 한 일**
+
+1. **MainFrame.java 구현**
+   - 위치: `com.codeflow.ui.MainFrame`
+   - 메인 윈도우 프레임 (1200x800)
+   - 시스템 룩앤필 적용
+
+2. **프로젝트 경로 선택 UI**
+   - JFileChooser로 폴더 선택
+   - 직접 경로 입력도 가능
+
+3. **분석 옵션 UI**
+   - URL 필터 입력 필드 (예: `/api/user/*`)
+   - 출력 스타일 선택 (normal, compact, detailed)
+
+4. **결과 표시 패널 (ResultPanel.java)**
+   - 위치: `com.codeflow.ui.ResultPanel`
+   - JTree로 호출 흐름 시각화
+   - 레이어별 색상 구분 (Controller: 녹색, Service: 파랑, DAO: 보라)
+   - 커스텀 TreeCellRenderer 구현
+
+5. **분석 실행 (SwingWorker)**
+   - 백그라운드 스레드에서 분석 실행
+   - ProgressBar로 진행 상태 표시
+   - UI 블로킹 방지
+
+6. **엑셀 저장 기능**
+   - JFileChooser로 저장 위치 선택
+   - 분석 결과를 엑셀로 내보내기
+
+7. **Main.java 연동**
+   - `--gui` 옵션으로 GUI 모드 실행
+   - GUI 모드에서는 `--path` 옵션 불필요
+
+**왜 이렇게 구현했는가?**
+
+1. **SwingWorker 사용 이유**
+   - 분석 작업이 오래 걸릴 수 있음
+   - 메인 UI 스레드 블로킹 방지
+   - 진행 상태 표시 가능
+
+2. **JTree 선택 이유**
+   - 호출 흐름이 트리 구조
+   - 노드 펼치기/접기 지원
+   - 커스텀 렌더러로 색상 적용 용이
+
+3. **레이어별 색상 적용**
+   - ConsoleOutput과 동일한 색상 스킴
+   - 시각적으로 레이어 구분 용이
+
+**배운 점**
+
+- Swing에서 백그라운드 작업은 SwingWorker 사용
+- DefaultTreeCellRenderer를 상속하여 커스텀 렌더링
+- JTree 행 높이, 폰트 설정 방법
+
+**트러블슈팅: GUI 한글 깨짐 (Issue #009)**
+- 문제: JTree에서 한글이 □로 표시됨
+- 원인: `Consolas` 폰트는 한글 글리프 없음
+- 해결: `Malgun Gothic` (맑은 고딕)으로 폰트 변경
+- 교훈: 다국어 UI에서는 한글 지원 폰트 사용 필수
+
+**트러블슈팅: GUI 텍스트 드래그 선택 불가 (Issue #010)**
+- 문제: JTree에서 텍스트 부분 선택 불가, 노드 단위로만 선택됨
+- 시도: JTextPane, DefaultCaret 설정 등 → 실패
+- 해결: `JEditorPane` + HTML 방식으로 완전히 변경
+- 결과: 색상 유지 + 자유로운 텍스트 드래그 선택 가능
+
+**트러블슈팅: GUI 창 닫아도 프로세스 종료 안 됨 (Issue #011)**
+- 문제: X 버튼으로 창 닫아도 Java 프로세스가 남아있음
+- 원인: SwingWorker 백그라운드 스레드가 JVM 종료 방해
+- 해결: `WindowListener`로 `System.exit(0)` 명시적 호출
+- 교훈: EXIT_ON_CLOSE만으로는 불충분, 명시적 종료 필요
