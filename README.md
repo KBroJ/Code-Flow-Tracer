@@ -75,7 +75,7 @@ java -jar code-flow-tracer.jar -p /path/to/project -s detailed
 | **콘솔 출력** | 트리 형태 + ANSI 색상 지원 | ✅ 완료 |
 | **엑셀 출력** | 호출 흐름 + SQL 목록 시트 | ✅ 완료 |
 | **마크다운 출력** | 문서화용 출력 형식 | ⏳ 예정 |
-| **Desktop GUI** | Swing 기반, JAR 더블클릭 실행 | ✅ 완료 |
+| **Desktop GUI** | Swing 기반, FlatLaf 다크 테마 | ✅ 완료 |
 | **전자정부프레임워크** | 레거시 SI 환경 특화 지원 | ✅ 지원 |
 
 ---
@@ -132,7 +132,7 @@ javaw -jar code-flow-tracer.jar --gui
 | XML | JDOM2 | iBatis/MyBatis XML 파싱 |
 | Excel | Apache POI | 엑셀 출력 |
 | CLI | Picocli | 명령줄 인터페이스 |
-| GUI | Swing | Desktop GUI (폐쇄망 대응) |
+| GUI | Swing + FlatLaf | Desktop GUI (다크 테마) |
 
 ### 왜 이 기술들을 선택했나요?
 

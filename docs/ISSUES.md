@@ -766,6 +766,71 @@ addWindowListener(new java.awt.event.WindowAdapter() {
 
 ---
 
+### Issue #012: HTML 렌더링에서 박스 문자 정렬 불일치
+
+**발생일**: 2025-12-24
+**상태**: ✅ 해결
+
+#### 문제 상황
+GUI 결과 패널에서 CLI 스타일 박스 헤더가 정렬되지 않음
+```
+┌──────────────────────────────────────────────────┐
+│     Code Flow Tracer - 호출 흐름 분석 결과       │  ← 예상
+└──────────────────────────────────────────────────┘
+
+실제 출력:
+┌──────────────────────────────────────────────────┐
+│     Code Flow Tracer - 호출 흐름 분석 결과
+                                                   │  ← 오른쪽 │가 다음 줄로 밀림
+└──────────────────────────────────────────────────┘
+```
+
+#### 원인 분석
+**터미널 vs HTML 렌더링 차이:**
+
+| 환경 | 문자 폭 처리 |
+|------|-------------|
+| 터미널 (CLI) | 모든 문자가 고정 폭 (한글=2칸, ASCII=1칸) 정확히 보장 |
+| HTML (JEditorPane) | "monospace" 폰트여도 `│`, `─`, 한글, 공백의 실제 픽셀 폭이 미세하게 다름 |
+
+- `center()` 함수에서 한글 폭(2칸)을 계산해도 HTML 렌더링에서는 정확히 반영 안 됨
+- 박스 문자(`│`, `─`)가 일반 문자와 다른 폭으로 렌더링될 수 있음
+- CSS `font-family: monospace`가 완전한 고정폭을 보장하지 않음
+
+#### 시도한 해결책
+1. **한글 폭 계산 추가** (`getDisplayWidth`, `isWideChar`) - 효과 없음
+   - 계산은 맞지만 HTML 렌더링이 이를 따르지 않음
+
+2. **단순 형태로 변경** (측면 `│` 제거, `═` 라인만 사용)
+   - 동작하지만 박스 느낌이 사라짐
+
+3. **HTML `<table>` 사용** ✅ 최종 해결
+   - CSS border로 박스 생성
+   - 브라우저/HTML 렌더러가 테이블 정렬을 보장
+
+#### 최종 해결
+HTML `<table>` 태그로 헤더 박스 구현:
+
+```java
+// ResultPanel.java - appendHeader()
+private void appendHeader(StringBuilder html) {
+    html.append("</pre>");  // pre 태그 임시 종료
+    html.append("<table style='border-collapse: collapse; color: #4EC9B0; ...'>");
+    html.append("<tr><td style='border: 1px solid #4EC9B0; padding: 8px 40px;'>");
+    html.append("Code Flow Tracer - 호출 흐름 분석 결과");
+    html.append("</td></tr>");
+    html.append("</table>");
+    html.append("<pre>");  // 다시 pre 시작
+}
+```
+
+#### 배운 점
+- 터미널 고정폭과 HTML monospace 폰트는 동작 방식이 다름
+- 박스 문자 정렬이 필요하면 HTML에서는 `<table>` 또는 CSS Grid 사용이 확실함
+- CLI 출력을 그대로 GUI로 옮기는 것은 한계가 있음 → 각 환경에 맞는 방식 선택 필요
+
+---
+
 ## 미해결/진행중 문제
 
 (현재 없음)

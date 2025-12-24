@@ -36,6 +36,9 @@ dependencies {
     // CLI 파싱
     implementation 'info.picocli:picocli:4.7.5'
 
+    // 모던 UI Look&Feel
+    implementation 'com.formdev:flatlaf:3.2.5'
+
     // 로깅
     implementation 'org.slf4j:slf4j-api:2.0.9'
     implementation 'ch.qos.logback:logback-classic:1.4.11'
