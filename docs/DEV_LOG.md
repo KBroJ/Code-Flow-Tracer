@@ -876,3 +876,63 @@ Week 4: 개선 + 회고     ░░░░░░░░░░░░░░░░░�
 - 원인: SwingWorker 백그라운드 스레드가 JVM 종료 방해
 - 해결: `WindowListener`로 `System.exit(0)` 명시적 호출
 - 교훈: EXIT_ON_CLOSE만으로는 불충분, 명시적 종료 필요
+
+---
+
+### 2025-12-24 (화) - Session 13
+
+#### Session 13: GUI 개선 (다크 테마 + 콘솔 스타일)
+
+**오늘 한 일**
+
+1. **FlatLaf 다크 테마 적용**
+   - `build.gradle`에 FlatLaf 3.2.5 의존성 추가
+   - `MainFrame.launch()`에서 `FlatDarculaLaf.setup()` 호출
+   - IntelliJ Darcula 스타일의 모던 UI 적용
+
+2. **다크 테마용 색상 수정**
+   - 밝은 배경용 색상 → 다크 배경용 색상으로 변경
+   - VS Code 터미널 색상 팔레트 참고
+   - Controller: #4EC9B0 (청록), Service: #569CD6 (파랑), DAO: #C586C0 (보라)
+
+3. **콘솔 스타일 결과 패널**
+   - CLI ConsoleOutput과 동일한 형식으로 출력
+   - 헤더 박스, 요약 섹션, 흐름 번호, 트리 구조 적용
+   - URL 분리 정보 추가: `(/order + /detail.do)`
+
+4. **설정 저장 기능 구현**
+   - Java Preferences API 사용 (OS별 적절한 위치에 저장)
+   - JTextField → 편집 가능한 JComboBox로 변경 (드롭다운 선택)
+   - 최근 프로젝트 경로 최대 10개 저장
+   - URL 필터, 출력 스타일 설정 기억
+   - 분석 성공 시 자동으로 설정 저장
+
+**트러블슈팅: HTML 렌더링에서 박스 문자 정렬 불일치 (Issue #012)**
+- 문제: CLI 스타일 박스 헤더 `│...│`가 정렬 안 됨
+- 원인: HTML monospace 폰트가 박스 문자/한글 폭을 일관되게 렌더링 안 함
+- 시도: 한글 폭 계산 (`getDisplayWidth`) → 효과 없음
+- 해결: HTML `<table>` + CSS border로 박스 생성
+- 교훈: CLI 출력을 그대로 GUI로 옮기는 것은 한계 있음, 환경에 맞는 방식 선택 필요
+
+**왜 이렇게 구현했는가?**
+
+1. **FlatLaf 선택 이유**
+   - 한 줄 코드로 모던 UI 적용 가능
+   - IntelliJ와 유사한 Darcula 테마 제공
+   - 개발자 도구에 적합한 다크 테마
+
+2. **HTML table 사용 이유**
+   - 박스 문자 정렬 문제 해결
+   - CSS가 테이블 셀 정렬을 보장
+   - pre 태그와 혼용 가능
+
+3. **Preferences API 선택 이유**
+   - Java 표준 API (추가 의존성 없음)
+   - OS별 적절한 위치에 자동 저장 (Windows: Registry, Mac/Linux: 홈)
+   - 파일 직접 관리 불필요
+
+**배운 점**
+- 터미널 고정폭과 HTML monospace는 동작 방식이 다름
+- 다크 테마에서는 색상 대비(contrast) 고려 필수
+- CLI 출력을 GUI로 변환 시 환경 특성 고려 필요
+- Preferences API로 간단하게 설정 저장 가능 (파일 관리 불필요)

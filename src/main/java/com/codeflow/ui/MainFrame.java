@@ -8,6 +8,8 @@ import com.codeflow.parser.JavaSourceParser;
 import com.codeflow.parser.ParsedClass;
 import com.codeflow.parser.SqlInfo;
 
+import com.formdev.flatlaf.FlatDarculaLaf;
+
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.TitledBorder;
@@ -17,8 +19,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.prefs.Preferences;
 
 /**
  * Code Flow Tracer GUI 메인 프레임
@@ -31,8 +35,15 @@ public class MainFrame extends JFrame {
     private static final int DEFAULT_WIDTH = 1200;
     private static final int DEFAULT_HEIGHT = 800;
 
-    // 경로 선택
-    private JTextField projectPathField;
+    // 설정 저장 (Preferences API)
+    private static final String PREF_RECENT_PATHS = "recentPaths";
+    private static final String PREF_URL_FILTER = "urlFilter";
+    private static final String PREF_OUTPUT_STYLE = "outputStyle";
+    private static final int MAX_RECENT_PATHS = 10;
+    private final Preferences prefs = Preferences.userNodeForPackage(MainFrame.class);
+
+    // 경로 선택 (콤보박스로 최근 경로 드롭다운)
+    private JComboBox<String> projectPathComboBox;
     private JButton browseButton;
 
     // 분석 옵션
@@ -42,6 +53,7 @@ public class MainFrame extends JFrame {
     // 분석 버튼
     private JButton analyzeButton;
     private JButton exportExcelButton;
+    private JButton settingsButton;
 
     // 결과 표시
     private ResultPanel resultPanel;
@@ -78,13 +90,44 @@ public class MainFrame extends JFrame {
                 System.exit(0);
             }
         });
+    }
 
-        // 시스템 룩앤필 적용
-        try {
-            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-            SwingUtilities.updateComponentTreeUI(this);
-        } catch (Exception e) {
-            // 기본 룩앤필 사용
+    /**
+     * 설정 팝업 메뉴 생성
+     */
+    private JPopupMenu createSettingsPopupMenu() {
+        JPopupMenu popup = new JPopupMenu();
+
+        JMenuItem clearSettingsItem = new JMenuItem("설정 초기화");
+        clearSettingsItem.setToolTipText("저장된 최근 경로 및 옵션 설정을 모두 삭제합니다");
+        clearSettingsItem.addActionListener(e -> handleClearSettings());
+        popup.add(clearSettingsItem);
+
+        return popup;
+    }
+
+    /**
+     * 설정 초기화 핸들러
+     */
+    private void handleClearSettings() {
+        int confirm = JOptionPane.showConfirmDialog(
+                this,
+                "저장된 모든 설정(최근 경로, URL 필터, 출력 스타일)을 삭제합니다.\n계속하시겠습니까?",
+                "설정 초기화",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE
+        );
+
+        if (confirm == JOptionPane.YES_OPTION) {
+            try {
+                prefs.clear();
+                projectPathComboBox.removeAllItems();
+                urlFilterField.setText("");
+                styleComboBox.setSelectedItem("normal");
+                statusLabel.setText("설정이 초기화되었습니다.");
+            } catch (Exception ex) {
+                showError("설정 초기화 실패: " + ex.getMessage());
+            }
         }
     }
 
@@ -92,17 +135,20 @@ public class MainFrame extends JFrame {
      * UI 컴포넌트 초기화
      */
     private void initializeComponents() {
-        // 경로 선택
-        projectPathField = new JTextField(40);
-        projectPathField.setEditable(true);
+        // 경로 선택 (편집 가능한 콤보박스)
+        projectPathComboBox = new JComboBox<>();
+        projectPathComboBox.setEditable(true);
+        projectPathComboBox.setPreferredSize(new Dimension(500, 28));
+        loadRecentPaths();
         browseButton = new JButton("찾아보기...");
 
         // 분석 옵션
         urlFilterField = new JTextField(20);
         urlFilterField.setToolTipText("예: /api/user/*, /user/** (빈칸이면 전체 분석)");
+        urlFilterField.setText(prefs.get(PREF_URL_FILTER, ""));
 
         styleComboBox = new JComboBox<>(new String[]{"normal", "compact", "detailed"});
-        styleComboBox.setSelectedItem("normal");
+        styleComboBox.setSelectedItem(prefs.get(PREF_OUTPUT_STYLE, "normal"));
 
         // 버튼
         analyzeButton = new JButton("분석 시작");
@@ -110,6 +156,10 @@ public class MainFrame extends JFrame {
 
         exportExcelButton = new JButton("엑셀 저장");
         exportExcelButton.setEnabled(false); // 분석 전에는 비활성화
+
+        settingsButton = new JButton("\u2699"); // ⚙ 톱니바퀴
+        settingsButton.setToolTipText("설정");
+        settingsButton.setFont(settingsButton.getFont().deriveFont(16f));
 
         // 결과 패널
         resultPanel = new ResultPanel();
@@ -154,7 +204,7 @@ public class MainFrame extends JFrame {
         // 경로 선택 패널
         JPanel pathPanel = new JPanel(new BorderLayout(5, 0));
         pathPanel.setBorder(new TitledBorder("프로젝트 경로"));
-        pathPanel.add(projectPathField, BorderLayout.CENTER);
+        pathPanel.add(projectPathComboBox, BorderLayout.CENTER);
         pathPanel.add(browseButton, BorderLayout.EAST);
 
         // 옵션 패널
@@ -171,6 +221,7 @@ public class MainFrame extends JFrame {
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 5));
         buttonPanel.add(exportExcelButton);
         buttonPanel.add(analyzeButton);
+        buttonPanel.add(settingsButton);
 
         // 조합
         JPanel upperPanel = new JPanel(new BorderLayout(10, 5));
@@ -209,8 +260,15 @@ public class MainFrame extends JFrame {
         // 엑셀 저장 버튼
         exportExcelButton.addActionListener(this::handleExportExcel);
 
-        // Enter 키로 분석 시작
-        projectPathField.addActionListener(this::handleAnalyze);
+        // 설정 버튼 (팝업 메뉴 표시)
+        JPopupMenu settingsPopup = createSettingsPopupMenu();
+        settingsButton.addActionListener(e -> {
+            settingsPopup.show(settingsButton, 0, settingsButton.getHeight());
+        });
+
+        // Enter 키로 분석 시작 (콤보박스 에디터에 리스너 추가)
+        JTextField comboEditor = (JTextField) projectPathComboBox.getEditor().getEditorComponent();
+        comboEditor.addActionListener(this::handleAnalyze);
         urlFilterField.addActionListener(this::handleAnalyze);
     }
 
@@ -223,7 +281,7 @@ public class MainFrame extends JFrame {
         chooser.setDialogTitle("분석할 프로젝트 폴더 선택");
 
         // 현재 경로가 있으면 해당 위치에서 시작
-        String currentPath = projectPathField.getText().trim();
+        String currentPath = getSelectedPath();
         if (!currentPath.isEmpty()) {
             Path path = Paths.get(currentPath);
             if (Files.exists(path)) {
@@ -233,18 +291,27 @@ public class MainFrame extends JFrame {
 
         int result = chooser.showOpenDialog(this);
         if (result == JFileChooser.APPROVE_OPTION) {
-            projectPathField.setText(chooser.getSelectedFile().getAbsolutePath());
+            String selectedPath = chooser.getSelectedFile().getAbsolutePath();
+            projectPathComboBox.setSelectedItem(selectedPath);
         }
+    }
+
+    /**
+     * 콤보박스에서 현재 선택/입력된 경로 가져오기
+     */
+    private String getSelectedPath() {
+        Object item = projectPathComboBox.getEditor().getItem();
+        return item != null ? item.toString().trim() : "";
     }
 
     /**
      * 분석 시작 버튼 핸들러
      */
     private void handleAnalyze(ActionEvent e) {
-        String pathStr = projectPathField.getText().trim();
+        String pathStr = getSelectedPath();
         if (pathStr.isEmpty()) {
             showError("프로젝트 경로를 입력하세요.");
-            projectPathField.requestFocus();
+            projectPathComboBox.requestFocus();
             return;
         }
 
@@ -328,6 +395,10 @@ public class MainFrame extends JFrame {
                     // 엑셀 저장 버튼 활성화
                     exportExcelButton.setEnabled(true);
 
+                    // 설정 저장 (분석 성공 시)
+                    saveRecentPath(projectPath.toString());
+                    saveSettings();
+
                 } catch (Exception ex) {
                     String errorMsg = ex.getCause() != null ? ex.getCause().getMessage() : ex.getMessage();
                     showError("분석 중 오류 발생: " + errorMsg);
@@ -386,12 +457,67 @@ public class MainFrame extends JFrame {
      * UI 활성화/비활성화
      */
     private void setUIEnabled(boolean enabled) {
-        projectPathField.setEnabled(enabled);
+        projectPathComboBox.setEnabled(enabled);
         browseButton.setEnabled(enabled);
         urlFilterField.setEnabled(enabled);
         styleComboBox.setEnabled(enabled);
         analyzeButton.setEnabled(enabled);
         exportExcelButton.setEnabled(enabled && currentResult != null);
+    }
+
+    // ===== 설정 저장/로드 =====
+
+    /**
+     * 최근 경로 목록 로드
+     */
+    private void loadRecentPaths() {
+        String pathsStr = prefs.get(PREF_RECENT_PATHS, "");
+        if (!pathsStr.isEmpty()) {
+            String[] paths = pathsStr.split("\\|");
+            for (String path : paths) {
+                if (!path.trim().isEmpty() && Files.exists(Paths.get(path.trim()))) {
+                    projectPathComboBox.addItem(path.trim());
+                }
+            }
+            // 가장 최근 경로 선택
+            if (projectPathComboBox.getItemCount() > 0) {
+                projectPathComboBox.setSelectedIndex(0);
+            }
+        }
+    }
+
+    /**
+     * 최근 경로 저장 (가장 최근 경로를 맨 위로)
+     */
+    private void saveRecentPath(String newPath) {
+        List<String> paths = new ArrayList<>();
+        paths.add(newPath);
+
+        // 기존 항목 중 중복 제거하고 추가
+        for (int i = 0; i < projectPathComboBox.getItemCount(); i++) {
+            String existingPath = projectPathComboBox.getItemAt(i);
+            if (!existingPath.equals(newPath) && paths.size() < MAX_RECENT_PATHS) {
+                paths.add(existingPath);
+            }
+        }
+
+        // 콤보박스 갱신
+        projectPathComboBox.removeAllItems();
+        for (String path : paths) {
+            projectPathComboBox.addItem(path);
+        }
+        projectPathComboBox.setSelectedItem(newPath);
+
+        // Preferences에 저장
+        prefs.put(PREF_RECENT_PATHS, String.join("|", paths));
+    }
+
+    /**
+     * URL 필터, 출력 스타일 설정 저장
+     */
+    private void saveSettings() {
+        prefs.put(PREF_URL_FILTER, urlFilterField.getText().trim());
+        prefs.put(PREF_OUTPUT_STYLE, (String) styleComboBox.getSelectedItem());
     }
 
     /**
@@ -405,6 +531,13 @@ public class MainFrame extends JFrame {
      * GUI 실행
      */
     public static void launch() {
+        // FlatLaf 다크 테마 적용 (컴포넌트 생성 전에 설정)
+        try {
+            FlatDarculaLaf.setup();
+        } catch (Exception e) {
+            System.err.println("FlatLaf 테마 적용 실패: " + e.getMessage());
+        }
+
         SwingUtilities.invokeLater(() -> {
             MainFrame frame = new MainFrame();
             frame.setVisible(true);

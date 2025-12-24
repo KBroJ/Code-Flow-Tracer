@@ -134,6 +134,16 @@
 - [x] 창 닫을 때 프로세스 종료 문제 해결 (WindowListener 추가)
 - [x] run.bat 개선 (javaw 사용 → 콘솔 창 없이 GUI만 실행)
 
+### 2025-12-24 (화) - Session 13 ✅
+**GUI 개선**
+- [x] UI 디자인 개선 (FlatLaf Darcula 다크 테마 적용)
+- [x] 다크 테마용 색상 수정 (VS Code 터미널 참고)
+- [x] 출력 내용 콘솔 스타일로 변경 (CLI ConsoleOutput 형식 재현)
+- [x] 헤더 박스 정렬 문제 해결 (HTML table 사용)
+- [x] 프로젝트 경로 기억 기능 (Java Preferences API)
+- [x] 최근 경로 드롭다운 (JComboBox, 최대 10개)
+- [x] URL 필터/출력 스타일 설정 저장
+
 ### 실제 테스트
 - [ ] egovframe-simple-homepage-template 클론
 - [ ] 실제 전자정부 프로젝트로 통합 테스트
@@ -214,6 +224,7 @@
 | #9 | GUI 한글 깨짐 (Consolas 폰트 → Malgun Gothic) | ✅ 해결 | 2025-12-24 |
 | #10 | GUI 텍스트 드래그 선택 불가 (JTree → JEditorPane + HTML) | ✅ 해결 | 2025-12-24 |
 | #11 | GUI 창 닫아도 프로세스 종료 안 됨 (WindowListener 추가) | ✅ 해결 | 2025-12-24 |
+| #12 | HTML 박스 문자 정렬 불일치 (HTML table로 해결) | ✅ 해결 | 2025-12-24 |
 
 ---
 
