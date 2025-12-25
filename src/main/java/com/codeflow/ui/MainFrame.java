@@ -120,6 +120,16 @@ public class MainFrame extends JFrame {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
 
+        // 윈도우 아이콘 설정
+        try {
+            java.net.URL iconUrl = getClass().getResource("/icon.png");
+            if (iconUrl != null) {
+                setIconImage(new ImageIcon(iconUrl).getImage());
+            }
+        } catch (Exception e) {
+            // 아이콘 로드 실패 시 무시
+        }
+
         addWindowListener(new java.awt.event.WindowAdapter() {
             @Override
             public void windowClosing(java.awt.event.WindowEvent e) {

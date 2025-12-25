@@ -79,9 +79,11 @@ java -jar code-flow-tracer.jar --path <프로젝트경로>
 |------|------|------|--------|
 | `--path` | `-p` | 분석할 프로젝트 경로 (필수) | - |
 | `--url` | `-u` | 분석할 URL 패턴 | 전체 |
-| `--class` | `-c` | 분석할 클래스명 | 전체 |
-| `--format` | `-f` | 출력 형식 (console, excel, markdown) | console |
-| `--output` | `-o` | 출력 파일 경로 | - |
+| `--style` | `-s` | 출력 스타일 (compact, normal, detailed) | normal |
+| `--output` | `-o` | 결과 파일 저장 경로 | - |
+| `--output-dir` | `-d` | 엑셀 저장 디렉토리 | output |
+| `--excel` | - | 엑셀 파일로 출력 | false |
+| `--no-color` | - | 색상 출력 비활성화 | false |
 | `--gui` | - | GUI 모드로 실행 | false |
 | `--help` | `-h` | 도움말 출력 | - |
 | `--version` | `-V` | 버전 출력 | - |
@@ -95,14 +97,11 @@ java -jar code-flow-tracer.jar -p /path/to/project
 # 특정 URL 패턴만 분석
 java -jar code-flow-tracer.jar -p /path/to/project -u "/api/user/*"
 
-# 특정 Controller만 분석
-java -jar code-flow-tracer.jar -p /path/to/project -c UserController
+# 출력 스타일 지정
+java -jar code-flow-tracer.jar -p /path/to/project -s detailed
 
 # 엑셀로 출력
-java -jar code-flow-tracer.jar -p /path/to/project -f excel -o result.xlsx
-
-# 마크다운으로 출력
-java -jar code-flow-tracer.jar -p /path/to/project -f markdown -o result.md
+java -jar code-flow-tracer.jar -p /path/to/project --excel -o result.xlsx
 
 # GUI 모드
 java -jar code-flow-tracer.jar --gui
@@ -248,24 +247,6 @@ java -jar code-flow-tracer.jar --gui
 |-----|------|------------|---------|-----|--------|-----|
 | /user/list.do | GET | UserController.selectUserList | UserServiceImpl.selectUserList | UserDAO.selectUserList | userDAO.selectUserList | SELECT... |
 
-### 4.3 마크다운 출력
-```markdown
-# API 호출 흐름
-
-## GET /user/list.do
-
-| Layer | Class | Method |
-|-------|-------|--------|
-| Controller | UserController | selectUserList() |
-| Service | UserServiceImpl | selectUserList() |
-| DAO | UserDAO | selectUserList() |
-
-**SQL:**
-\`\`\`sql
-SELECT USER_ID, USER_NAME FROM TB_USER WHERE USE_YN = 'Y'
-\`\`\`
-```
-
 ---
 
 ## 5. 지원 환경
@@ -322,12 +303,7 @@ A: 네, JAR 파일 하나만 있으면 됩니다. 외부 네트워크 불필요.
 A: 현재 MVP에서는 XML만 지원합니다. 향후 확장 예정.
 
 **Q: Java 설치 없이 EXE 파일로 실행할 수 없나요?**
-A: 향후 지원 예정입니다. 아래 옵션들을 검토 중:
-
-| 방식 | 설명 | 장점 | 단점 |
-|------|------|------|------|
-| **jpackage** | Java 14+ 기본 제공, OS별 설치파일 생성 | 공식 도구, 안정적 | JRE 포함으로 용량 큼 (~150MB) |
-| **jlink** | 필요한 모듈만 포함한 경량 JRE 생성 | 용량 최소화 (~40MB) | 모듈 의존성 분석 필요 |
-| **Portable 배포** | JDK ZIP + JAR + 배치파일 | 설정 가장 간단 | 수동 압축 해제 필요 |
-
-현재는 **Portable JDK + JAR** 조합을 권장합니다. 정식 릴리즈 시 jpackage로 설치파일 제공 예정.
+A: 네, **Windows 설치파일 (.exe)** 을 제공합니다.
+- GitHub Releases에서 `CFT-1.0.0.exe` 다운로드
+- 설치파일에 JRE가 포함되어 별도 Java 설치 없이 실행 가능
+- 용량: 약 150MB (JRE 포함)

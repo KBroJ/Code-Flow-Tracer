@@ -29,7 +29,7 @@ com.codeflow/
 ├── Main.java           # 엔트리포인트
 ├── parser/             # 소스 코드 파싱 (JavaParser)
 ├── analyzer/           # 호출 흐름 분석
-├── output/             # 출력 (Console, Excel, Markdown)
+├── output/             # 출력 (Console, Excel)
 └── ui/                 # Swing GUI
 ```
 

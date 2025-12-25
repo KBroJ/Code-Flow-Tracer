@@ -1,6 +1,6 @@
 # 전체 설계 (Architecture)
 
-> 최종 수정일: 2025-12-23
+> 최종 수정일: 2025-12-25
 
 ## 1. 프로젝트 개요
 
@@ -26,7 +26,7 @@
 [SQL: SELECT * FROM TB_USER...]
 ```
 
-이 흐름을 **자동으로 분석**하고 **엑셀/마크다운으로 출력**
+이 흐름을 **자동으로 분석**하고 **엑셀로 출력**
 
 ---
 
@@ -61,9 +61,9 @@
           ▼
 ┌─────────────────────────────────────────────────────────┐
 │                      Output                              │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐      │
-│  │   Console   │  │    Excel    │  │  Markdown   │      │
-│  └─────────────┘  └─────────────┘  └─────────────┘      │
+│  ┌─────────────┐  ┌─────────────┐                       │
+│  │   Console   │  │    Excel    │                       │
+│  └─────────────┘  └─────────────┘                       │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -91,8 +91,7 @@ com.codeflow/
 ├── output/                   # 결과 출력
 │   ├── OutputFormatter.java  # 출력 인터페이스
 │   ├── ConsoleOutput.java    # 콘솔 출력
-│   ├── ExcelOutput.java      # 엑셀 출력 (Apache POI)
-│   └── MarkdownOutput.java   # 마크다운 출력
+│   └── ExcelOutput.java      # 엑셀 출력 (Apache POI)
 │
 └── ui/                       # GUI
     ├── MainFrame.java        # 메인 윈도우
@@ -199,7 +198,6 @@ FlowResult result = analyzer.analyze("/api/user/list");
 |-----------|------|-----------|
 | ConsoleOutput | 터미널 출력, 디버깅 | - |
 | ExcelOutput | 인수인계 문서 | Apache POI |
-| MarkdownOutput | README, Wiki | - |
 
 ---
 
@@ -346,7 +344,7 @@ code-flow-result.xlsx (이미 존재)
 - [x] 콘솔 출력 (트리 형태, ANSI 색상)
 - [x] iBatis XML 파싱 (SqlInfo, IBatisParser, DAO-SQL 연결)
 - [x] 엑셀 출력 (요약, API 목록, 호출 흐름 시트)
-- [ ] Swing GUI
+- [x] Swing GUI (FlatLaf 다크 테마)
 
 ### Phase 2 (향후)
 - [ ] MyBatis 어노테이션 지원
