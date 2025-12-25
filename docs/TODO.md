@@ -1,6 +1,6 @@
 # 할 일 목록 (TODO)
 
-> 최종 수정일: 2025-12-25
+> 최종 수정일: 2025-12-26
 
 ## 진행 상태 범례
 - ✅ 완료
@@ -168,6 +168,14 @@
 - [x] GUI 윈도우 아이콘 적용 (MainFrame.java)
 - [x] jpackage 설치파일 아이콘 적용 (build.gradle)
 
+### 2025-12-26 (목) - Session 17 ✅
+**GitHub Release v1.0.0 발행**
+- [x] PR #13 머지 (아이콘 추가, 문서 수정)
+- [x] shadowJar 빌드
+- [x] jpackage Windows 설치파일 생성
+- [x] GitHub Release v1.0.0 생성
+- [x] 릴리즈 노트 작성 및 파일 업로드
+
 ### 실제 테스트
 - [ ] egovframe-simple-homepage-template 클론
 - [ ] 실제 전자정부 프로젝트로 통합 테스트
@@ -227,9 +235,7 @@
 - [ ] 테스트 커버리지 80% 이상
 
 ### 배포
-- [ ] GitHub Releases
-- [ ] Maven Central 배포
-- [ ] 도커 이미지
+- [x] GitHub Releases ✅ 2025-12-26
 
 ### 설치파일/패키징
 - [x] jpackage로 Windows 설치파일 생성 (.exe) ✅ 2025-12-25
@@ -237,8 +243,6 @@
 - [x] 설치 삭제 시 설정(레지스트리) 자동 정리 ✅ 2025-12-25
 - [x] 애플리케이션 아이콘 추가 (exe, GUI 윈도우) ✅ 2025-12-25
 - [ ] 현대적 폴더 브라우저 UI (IFileDialog) - C# CustomAction 필요, 복잡도 높음
-- [ ] jlink로 경량 JRE 번들 생성 (폐쇄망 배포용, ~40MB)
-- [ ] 배치 스크립트 포함 배포 패키지 (Portable JDK + JAR)
 
 ---
 
@@ -258,6 +262,7 @@
 | #16 | WiX 6.0과 JDK 21 호환성 문제 (WiX 3.14 사용) | ✅ 해결 | 2025-12-25 |
 | #17 | jpackage description 한글 인코딩 오류 (영문으로 변경) | ✅ 해결 | 2025-12-25 |
 | #18 | jpackage exe 실행 시 아무 반응 없음 (--arguments --gui 추가) | ✅ 해결 | 2025-12-25 |
+| #19 | Gradle clean 시 빌드 디렉토리 파일 잠금 (출력 경로 변경으로 우회) | ✅ 해결 | 2025-12-26 |
 
 ---
 

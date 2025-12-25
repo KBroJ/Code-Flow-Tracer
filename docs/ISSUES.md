@@ -1206,6 +1206,62 @@ if (projectPath == null && !guiMode) {
 
 ---
 
+### Issue #019: Gradle clean 시 빌드 디렉토리 파일 잠금
+
+**발생일**: 2025-12-26
+**상태**: ✅ 해결 (우회)
+
+#### 문제 상황
+`./gradlew clean shadowJar` 실행 시 빌드 디렉토리 삭제 실패:
+
+```
+FAILURE: Build failed with an exception.
+* What went wrong:
+Execution failed for task ':clean'.
+> java.io.IOException: Unable to delete directory 'C:\Devel\Code-Flow-Tracer\build'
+    Failed to delete some children:
+    - C:\Devel\Code-Flow-Tracer\build\installer\CFT-1.0.0.exe
+    - C:\Devel\Code-Flow-Tracer\build\jpackage-temp\images\win-exe.image\CFT-1.0.0.exe
+```
+
+#### 원인 분석
+- 이전 jpackage 실행으로 생성된 `.exe` 파일이 잠김
+- 가능한 잠금 원인:
+  - Windows 탐색기에서 해당 폴더 열어둠
+  - 백신 프로그램이 exe 파일 스캔 중
+  - 이전 jpackage 프로세스가 완전히 종료되지 않음
+- Windows 파일 시스템 특성: 열려있는 파일은 삭제 불가
+
+#### 시도한 해결책
+1. `clean` 없이 `shadowJar`만 실행 → ✅ shadowJar 성공
+2. jpackage 실행 시 기존 installer 폴더에 덮어쓰기 → ❌ AccessDeniedException
+3. jpackage 출력 경로를 `build/release`로 변경 → ✅ 성공
+
+#### 최종 해결
+jpackage를 직접 호출하면서 출력 경로를 변경:
+
+```powershell
+# 기존 (실패)
+--dest build/installer
+
+# 변경 (성공)
+--dest build/release
+```
+
+#### 영구적 해결 방법 (선택)
+1. **PC 재시작**: 모든 파일 잠금 해제
+2. **탐색기 종료**: 해당 폴더를 보고 있는 창 닫기
+3. **프로세스 확인**: 작업 관리자에서 관련 프로세스 종료
+4. **잠금 확인 도구**: Process Explorer, Handle 등으로 잠금 프로세스 찾기
+
+#### 배운 점
+- Windows에서 exe 파일은 탐색기, 백신 등에 의해 쉽게 잠김
+- Gradle clean이 실패해도 incremental build는 가능
+- 빌드 출력 경로를 변경하는 것도 유효한 우회 방법
+- CI/CD 환경에서는 매번 클린 빌드 환경을 사용하므로 이 문제 없음
+
+---
+
 ## 자주 발생하는 문제
 
 ### Gradle 빌드 관련
