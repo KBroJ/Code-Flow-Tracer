@@ -79,13 +79,13 @@ com.codeflow/
 │   ├── FlowNode.java         # 호출 흐름 트리 노드
 │   └── FlowResult.java       # 분석 결과 컨테이너
 │
-├── output/                   # [부분완료] 결과 출력
+├── output/                   # [완료] 결과 출력
 │   ├── ConsoleOutput.java    # 콘솔 출력 ✅
-│   ├── ExcelOutput.java      # 엑셀 출력 (예정)
-│   └── MarkdownOutput.java   # 마크다운 출력 (예정)
+│   └── ExcelOutput.java      # 엑셀 출력 ✅
 │
-└── ui/                       # [예정] GUI
-    └── MainFrame.java        # Swing GUI
+└── ui/                       # [완료] GUI
+    ├── MainFrame.java        # Swing GUI (FlatLaf 다크 테마)
+    └── ResultPanel.java      # 분석 결과 표시 패널
 ```
 
 ### 2.2 처리 단계
@@ -122,10 +122,9 @@ com.codeflow/
 └───────────────────────────┬─────────────────────────────────────┘
                             ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  3단계: Output (결과 출력) - 예정                                 │
+│  3단계: Output (결과 출력)                                        │
 │  - ConsoleOutput: 터미널에 트리 출력                             │
 │  - ExcelOutput: 엑셀 파일로 저장                                 │
-│  - MarkdownOutput: 마크다운 문서로 저장                          │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -1342,5 +1341,5 @@ Spring Boot, Spring Data JPA 등은 향후 확장 예정입니다.
 ---
 
 > **문서 작성일**: 2025-12-17
-> **최종 수정일**: 2025-12-18 (파라미터 분석 모듈 추가)
+> **최종 수정일**: 2025-12-25 (Markdown 출력 제거, GUI/Excel 완료 반영)
 > **작성자**: Claude Code (러너스하이 2기 프로젝트)

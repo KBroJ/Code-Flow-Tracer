@@ -115,7 +115,7 @@
 
 ---
 
-## Week 3: GUI + 테스트 🔄
+## Week 3: GUI + 테스트 ✅
 
 ### 2025-12-24 (화) - Session 12 ✅
 **Swing GUI 구현**
@@ -150,6 +150,24 @@
 - [x] 분석 요약 레이아웃 개선 (Leader Dots 점선 리더)
 - [x] 결과 패널 Ctrl+휠 폰트 크기 조절 (9px~24px)
 
+### 2025-12-25 (수) - Session 15 ✅
+**jpackage 설치 파일 생성**
+- [x] VERSION.md 생성 및 버전 관리 체계 수립
+- [x] jpackage task 구현 (build.gradle)
+- [x] WiX Toolset 호환성 문제 해결 (WiX 3.14)
+- [x] exe 실행 시 --gui 인자 자동 전달
+- [x] 설치 UI 커스터마이징 (바로가기 체크박스 간격)
+- [x] 설치 삭제 시 레지스트리 자동 정리
+
+### 2025-12-25 (수) - Session 16 ✅
+**문서 일관성 수정 및 아이콘 추가**
+- [x] 전체 문서 검토 및 일관성 수정
+- [x] Markdown 출력 기능 관련 내용 제거
+- [x] USAGE.md CLI 옵션 테이블 수정
+- [x] 애플리케이션 아이콘 추가 (DALL-E 생성)
+- [x] GUI 윈도우 아이콘 적용 (MainFrame.java)
+- [x] jpackage 설치파일 아이콘 적용 (build.gradle)
+
 ### 실제 테스트
 - [ ] egovframe-simple-homepage-template 클론
 - [ ] 실제 전자정부 프로젝트로 통합 테스트
@@ -179,7 +197,6 @@
 ## Backlog (향후 과제)
 
 ### 기능 확장
-- [ ] MarkdownOutput 구현
 - [ ] MyBatis 어노테이션 지원 (@Select 등)
 - [ ] Spring Data JPA 지원
 - [ ] 헥사고날 아키텍처 지원
@@ -218,6 +235,7 @@
 - [x] jpackage로 Windows 설치파일 생성 (.exe) ✅ 2025-12-25
 - [x] 설치 UI 바로가기 체크박스 간격 수정 ✅ 2025-12-25
 - [x] 설치 삭제 시 설정(레지스트리) 자동 정리 ✅ 2025-12-25
+- [x] 애플리케이션 아이콘 추가 (exe, GUI 윈도우) ✅ 2025-12-25
 - [ ] 현대적 폴더 브라우저 UI (IFileDialog) - C# CustomAction 필요, 복잡도 높음
 - [ ] jlink로 경량 JRE 번들 생성 (폐쇄망 배포용, ~40MB)
 - [ ] 배치 스크립트 포함 배포 패키지 (Portable JDK + JAR)

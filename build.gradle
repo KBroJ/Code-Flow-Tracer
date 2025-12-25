@@ -110,5 +110,6 @@ task jpackage(type: Exec, dependsOn: shadowJar) {
         '--win-shortcut-prompt',
         '--java-options', '-Dfile.encoding=UTF-8',
         '--arguments', '--gui',
+        '--icon', "${projectDir}/installer-resources/icon.ico",
         '--resource-dir', "${projectDir}/installer-resources"
 }

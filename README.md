@@ -41,13 +41,6 @@ SI 프로젝트에서 **레거시 코드를 파악하는 것은 매우 시간이
 > Controller → Service → DAO → SQL까지 호출 흐름을 트리 형태로 시각화합니다.
 > 각 계층(Controller, Service, DAO)은 색상으로 구분되어 한눈에 파악할 수 있습니다.
 
-### 엑셀 출력
-
-![Excel Output](assets/excel-output.png)
-
-> 분석 결과를 엑셀 파일로 내보내 문서화하거나 인수인계 자료로 활용할 수 있습니다.
-> **호출 흐름** 시트와 **SQL 목록** 시트로 구성됩니다.
-
 <details>
 <summary>출력 스타일 옵션 보기</summary>
 
@@ -64,6 +57,36 @@ java -jar code-flow-tracer.jar -p /path/to/project -s detailed
 
 </details>
 
+### GUI 모드
+
+![GUI Output](assets/gui-output.png)
+
+> FlatLaf Darcula 다크 테마를 적용한 Desktop GUI입니다.
+> CLI 없이 마우스로 프로젝트를 분석하고 결과를 확인할 수 있습니다.
+
+<details>
+<summary>GUI 주요 기능 보기</summary>
+
+| 기능 | 설명 |
+|------|------|
+| **프로젝트 선택** | 폴더 브라우저로 분석할 프로젝트 선택 |
+| **최근 경로 기억** | 최근 사용한 프로젝트 경로 10개 저장 |
+| **URL 필터** | 특정 URL 패턴만 분석 (예: `/api/user/*`) |
+| **출력 스타일** | Compact, Normal, Detailed 선택 |
+| **결과 보기** | 콘솔 스타일 트리 출력, 텍스트 드래그 선택 가능 |
+| **엑셀 저장** | 분석 결과를 엑셀 파일로 저장 |
+| **폰트 크기 조절** | Ctrl + 마우스 휠로 9px~24px 조절 |
+| **패널 리사이즈** | 좌측 설정 패널 드래그로 크기 조절 |
+
+</details>
+
+### 엑셀 출력
+
+![Excel Output](assets/excel-output.png)
+
+> 분석 결과를 엑셀 파일로 내보내 문서화하거나 인수인계 자료로 활용할 수 있습니다.
+> **호출 흐름** 시트와 **SQL 목록** 시트로 구성됩니다.
+
 ---
 
 ## 주요 기능
@@ -74,7 +97,6 @@ java -jar code-flow-tracer.jar -p /path/to/project -s detailed
 | **iBatis/MyBatis 파싱** | XML SQL 매퍼에서 쿼리 추출 | ✅ 완료 |
 | **콘솔 출력** | 트리 형태 + ANSI 색상 지원 | ✅ 완료 |
 | **엑셀 출력** | 호출 흐름 + SQL 목록 시트 | ✅ 완료 |
-| **마크다운 출력** | 문서화용 출력 형식 | ⏳ 예정 |
 | **Desktop GUI** | Swing 기반, FlatLaf 다크 테마 | ✅ 완료 |
 | **Windows 설치 파일** | JRE 번들 포함, Java 설치 불필요 | ✅ 완료 |
 | **전자정부프레임워크** | 레거시 SI 환경 특화 지원 | ✅ 지원 |
@@ -98,37 +120,45 @@ CFT-1.0.0.exe  (약 77MB, JRE 17 번들 포함)
 #### 요구사항
 - Java 17 이상
 
-#### 빌드 & 실행
+#### 빌드
 ```bash
-# 빌드
-./gradlew build
-
-# 단일 실행 JAR 생성
 ./gradlew shadowJar
-
-# 실행
-java -jar build/libs/code-flow-tracer.jar --path /your/project/src
 ```
 
-### CLI 옵션
+#### CLI 모드
 ```bash
-# 전체 프로젝트 분석
-java -jar code-flow-tracer.jar -p /path/to/project
+# 전체 프로젝트 분석 (콘솔 출력)
+java -jar build/libs/code-flow-tracer.jar -p /path/to/project
 
 # 특정 URL만 분석
-java -jar code-flow-tracer.jar -p /path/to/project -u "/api/user/*"
+java -jar build/libs/code-flow-tracer.jar -p /path/to/project -u "/api/user/*"
+
+# 출력 스타일 지정
+java -jar build/libs/code-flow-tracer.jar -p /path/to/project -s detailed
 
 # 엑셀로 출력
-java -jar code-flow-tracer.jar -p /path/to/project --excel -o result.xlsx
+java -jar build/libs/code-flow-tracer.jar -p /path/to/project --excel -o result.xlsx
+```
 
-# 출력 스타일 지정 (compact, normal, detailed)
-java -jar code-flow-tracer.jar -p /path/to/project -s detailed
+<details>
+<summary>CLI 옵션 전체 보기</summary>
 
-# GUI 모드 (콘솔 창 포함)
-java -jar code-flow-tracer.jar --gui
+| 옵션 | 설명 |
+|------|------|
+| `-p, --path` | 분석할 프로젝트 경로 (필수) |
+| `-u, --url` | URL 패턴 필터 (예: `/api/user/*`) |
+| `-s, --style` | 출력 스타일: `compact`, `normal`, `detailed` (기본: normal) |
+| `-o, --output` | 결과 파일 저장 경로 (예: result.xlsx) |
+| `-d, --output-dir` | 엑셀 저장 디렉토리 (기본: output) |
+| `--excel` | 엑셀 파일로 출력 |
+| `--no-color` | 색상 출력 비활성화 |
 
-# GUI 모드 (콘솔 창 없이, 권장)
-javaw -jar code-flow-tracer.jar --gui
+</details>
+
+#### GUI 모드
+```bash
+# GUI 실행 (콘솔 창 없이, 권장)
+javaw -jar build/libs/code-flow-tracer.jar --gui
 
 # 또는 scripts/run.bat 더블클릭
 ```
@@ -224,7 +254,7 @@ code-flow-tracer/
 | **인터페이스→구현체** | Ctrl+Alt+B로 수동 이동 | 자동 매핑 |
 | **URL→Controller** | 직접 연결 안 됨 | `/api/user/*` → Controller 자동 |
 | **DAO→SQL** | XML 파일 수동 검색 | iBatis/MyBatis 자동 연결 |
-| **결과 출력** | 화면에서만 확인 | 엑셀, 마크다운 문서화 |
+| **결과 출력** | 화면에서만 확인 | 엑셀 문서화 |
 | **일괄 분석** | ❌ 하나씩만 | ✅ 프로젝트 전체 |
 | **폐쇄망** | IDE 설치 필요 | JAR 하나로 실행 |
 
@@ -246,7 +276,7 @@ code-flow-tracer/
 **Code Flow Tracer만의 특징:**
 - ✅ **웹 애플리케이션 특화**: URL → Controller → Service → DAO → SQL 전체 흐름
 - ✅ **iBatis/MyBatis 연동**: DAO에서 SQL 쿼리까지 추적
-- ✅ **문서화 출력**: 엑셀, 마크다운으로 인수인계 자료 생성
+- ✅ **문서화 출력**: 엑셀로 인수인계 자료 생성
 - ✅ **전자정부프레임워크 최적화**: 국내 SI 환경 특화
 - ✅ **폐쇄망 지원**: 단일 JAR, 외부 의존성 없음
 
