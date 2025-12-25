@@ -536,3 +536,80 @@ UserService       UserServiceImpl, UserServiceV2, UserServiceV3
 3. **비고 칼럼 + 요약 시트 조합**
    - 비고: 간결하게 다른 구현체 목록
    - 요약: 처음 보는 사용자를 위한 상세 설명
+
+---
+
+## 9. 설정 저장 및 배포
+
+### 9.1 사용자 설정 저장
+
+**저장 방식**: Java Preferences API
+
+```java
+// MainFrame.java
+private final Preferences prefs = Preferences.userNodeForPackage(MainFrame.class);
+
+// 저장
+prefs.put("recentPaths", String.join("|", paths));
+prefs.put("urlFilter", filterText);
+prefs.put("outputStyle", "normal");
+
+// 로드
+String pathsStr = prefs.get("recentPaths", "");
+```
+
+**저장 위치** (OS별):
+| OS | 저장 위치 |
+|----|----------|
+| Windows | `HKCU\Software\JavaSoft\Prefs\com\codeflow\ui` |
+| Linux | `~/.java/.userPrefs/com/codeflow/ui/` |
+| macOS | `~/Library/Preferences/com.codeflow.ui.plist` |
+
+**저장 항목**:
+- `recentPaths`: 최근 프로젝트 경로 (최대 10개, `|`로 구분)
+- `urlFilter`: URL 필터 패턴
+- `outputStyle`: 출력 스타일 (compact/normal/detailed)
+
+**설계 결정 이유**:
+- Java 표준 API로 크로스 플랫폼 지원
+- 별도 설정 파일 관리 불필요
+- 설치 폴더(Program Files)에는 쓰기 권한이 없어 외부 저장 필요
+
+### 9.2 설치 파일 (jpackage)
+
+**빌드 방식**: JDK 내장 jpackage + WiX Toolset 3.14
+
+```bash
+./gradlew jpackage
+# 출력: build/installer/CFT-1.0.0.exe (약 77MB)
+```
+
+**포함 내용**:
+- 애플리케이션 JAR (code-flow-tracer.jar)
+- 번들 JRE (Java 17 런타임)
+- 네이티브 런처 (CFT.exe)
+
+**커스터마이징 파일** (`installer-resources/`):
+| 파일 | 용도 |
+|------|------|
+| `main.wxs` | 메인 WiX 프로젝트 (레지스트리 정리 추가) |
+| `ShortcutPromptDlg.wxs` | 바로가기 선택 다이얼로그 (간격 수정) |
+
+### 9.3 설치 삭제 시 정리
+
+**자동 정리 항목** (WiX RemoveRegistryKey):
+```
+HKCU\Software\JavaSoft\Prefs\com\codeflow\ui  ← 설정값
+HKCU\Software\JavaSoft\Prefs\com\codeflow     ← 상위 폴더
+HKCU\Software\CFT                              ← 설치 마커
+```
+
+**수동 삭제 방법** (설치 파일 없이 JAR로 사용한 경우):
+1. `Win + R` → `regedit` 실행
+2. `HKEY_CURRENT_USER\Software\JavaSoft\Prefs\com\codeflow` 로 이동
+3. `codeflow` 폴더 삭제
+
+또는 PowerShell:
+```powershell
+Remove-Item -Path "HKCU:\Software\JavaSoft\Prefs\com\codeflow" -Recurse
+```

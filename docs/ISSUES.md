@@ -944,6 +944,268 @@ private JPanel createSummaryRow(JLabel label, JLabel valueLabel) {
 
 ---
 
+## 해결된 문제 (Session 15)
+
+### Issue #015: jpackage 빌드 시 WiX Toolset 필요
+
+**발생일**: 2025-12-25
+**상태**: ✅ 해결
+
+#### 문제 상황
+jpackage로 Windows 설치 파일(.exe) 생성 시도 시 오류 발생:
+
+```
+Can not find WiX tools (light.exe, candle.exe)
+Download WiX 3.0 or later from https://wixtoolset.org
+Error: Invalid or unsupported type: [exe]
+```
+
+#### 원인 분석
+- jpackage는 Windows에서 `.exe`, `.msi` 설치 파일 생성 시 **WiX Toolset** 필요
+- WiX (Windows Installer XML): Microsoft의 오픈소스 설치 패키지 도구
+- JDK에 WiX가 포함되어 있지 않아 별도 설치 필요
+
+#### 해결 방법
+
+**WiX Toolset 설치**:
+1. https://wixtoolset.org/releases/ 접속
+2. WiX 3.x 또는 WiX 4.x 다운로드 및 설치
+3. 시스템 PATH에 WiX bin 폴더 추가 (설치 시 자동 추가됨)
+4. `gradlew jpackage` 재실행
+
+**확인 방법**:
+```bash
+# WiX 설치 확인
+where candle.exe
+where light.exe
+```
+
+#### 대안 (WiX 없이 진행)
+`app-image` 타입으로 포터블 버전 생성 가능:
+
+```groovy
+// build.gradle에서 --type 'exe' 대신
+'--type', 'app-image'
+```
+
+결과: 설치 파일 대신 실행 가능한 폴더 생성
+
+#### 배운 점
+- jpackage는 OS별로 추가 도구가 필요할 수 있음
+- Windows: WiX Toolset (exe, msi)
+- macOS: Xcode command line tools (pkg, dmg)
+- 폐쇄망 배포 시 빌드 환경 사전 준비 필요
+
+---
+
+### Issue #016: WiX 6.0과 JDK 21 호환성 문제
+
+**발생일**: 2025-12-25
+**상태**: ✅ 해결
+
+#### 문제 상황
+WiX Toolset 6.0 설치 후에도 jpackage에서 WiX 도구를 찾지 못함:
+
+```
+Can not find WiX tools (light.exe, candle.exe)
+```
+
+#### 원인 분석
+- **WiX 버전 아키텍처 변경**: WiX 4.0부터 도구 구조가 완전히 바뀜
+  - WiX 3.x: `candle.exe` + `light.exe` (분리된 도구)
+  - WiX 4/5/6: `wix.exe` (통합 도구)
+- **JDK 호환성 매트릭스**:
+  | JDK 버전 | WiX 3 | WiX 4/5/6 |
+  |----------|:-----:|:---------:|
+  | JDK 23 이하 | ✅ | ❌ |
+  | JDK 24+ | ✅ | ✅ |
+- JDK 24부터 WiX 4+ 지원 추가 (JDK-8319457)
+
+#### 시도한 해결책
+1. WiX 6.0 설치 → 실패 (JDK 21에서 미지원)
+2. PATH 확인 → WiX 6.0에는 candle.exe/light.exe 없음
+
+#### 최종 해결
+**WiX 3.14 추가 설치** (WiX 6.0과 공존 가능):
+
+```powershell
+winget install WiXToolset.WiXToolset
+```
+
+설치 경로: `C:\Program Files (x86)\WiX Toolset v3.14\bin\`
+
+#### 배운 점
+- 도구 버전 업그레이드가 항상 좋은 것은 아님 (호환성 확인 필요)
+- JDK LTS (17, 21)를 사용할 경우 WiX 3.x 사용 권장
+- 대부분의 개발자/튜토리얼이 WiX 3.x 기준 (업계 표준)
+
+---
+
+### Issue #017: jpackage description 한글 인코딩 오류
+
+**발생일**: 2025-12-25
+**상태**: ✅ 해결 (우회)
+
+#### 문제 상황
+WiX 3.14 설치 후에도 jpackage 빌드 실패 (exit code 311):
+
+```
+light.exe ... exited with 311 code
+```
+
+#### 원인 분석
+- `--description` 파라미터에 한글 포함:
+  ```
+  --description "Code Flow Tracer - Java 호출 흐름 분석 도구"
+  ```
+- 인코딩 변환 과정에서 깨짐:
+  ```
+  Gradle (UTF-8) → PowerShell (CP949) → jpackage → WiX (windows-1252)
+  ```
+- WiX 기본 로컬라이제이션 파일이 `windows-1252` 인코딩 사용
+- 한글(비 ASCII 문자)은 이 인코딩에서 지원되지 않음
+
+#### 최종 해결 (우회)
+description을 **영문으로 변경**:
+
+```groovy
+// build.gradle
+appDescription = 'Code Flow Tracer - Java Call Flow Analyzer'
+```
+
+#### 한글 사용이 필요한 경우 (대안)
+
+**방법 1: 커스텀 로컬라이제이션 파일**
+
+1. `installer-resources/` 폴더 생성
+2. WiX 로컬라이제이션 파일 작성 (ko-KR.wxl):
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<WixLocalization Culture="ko-KR" Codepage="949"
+                 xmlns="http://wixtoolset.org/schemas/v4/wxl">
+    <String Id="ApplicationDescription">Java 호출 흐름 분석 도구</String>
+</WixLocalization>
+```
+3. jpackage 옵션 추가:
+```bash
+jpackage ... --resource-dir ./installer-resources
+```
+
+**방법 2: JDK 24+ 업그레이드**
+- JDK-8290519에서 codepage 지정 기능 개선 논의 중
+- 향후 버전에서 더 쉬워질 가능성
+
+**참고 링크**:
+- [JDK-8290519: jpackage codepage 지정](https://bugs.openjdk.org/browse/JDK-8290519)
+- [JDK-8223325: WiX sources 개선](https://bugs.openjdk.org/browse/JDK-8223325)
+
+#### 한글 사용 범위 정리
+
+| 항목 | 한글 사용 | 비고 |
+|------|:--------:|------|
+| 앱 내부 (GUI, 메시지) | ✅ | 문제없음 |
+| 설치 파일 description | ⚠️ | 커스텀 설정 필요 |
+| 앱 이름 | ⚠️ | 영문 권장 |
+| 설치 경로 | ⚠️ | OS별 차이 |
+
+#### 배운 점
+- Windows 환경에서 인코딩은 여러 레이어에서 문제 발생 가능
+- jpackage → WiX 체인에서 기본 인코딩은 windows-1252 (한글 미지원)
+- 설치 파일 메타데이터와 앱 내부 콘텐츠는 별개로 처리됨
+- 빠른 배포가 필요하면 영문 사용, 한글 필수면 커스텀 설정 추가
+
+---
+
+### Issue #018: jpackage 생성 exe 실행 시 아무 반응 없음
+
+**발생일**: 2025-12-25
+**상태**: ✅ 해결
+
+#### 문제 상황
+jpackage로 생성한 CFT-1.0.0.exe를 설치 후 실행 시 아무 반응 없음:
+- 바탕화면 바로가기 클릭 → 반응 없음
+- 설치 폴더의 CFT.exe 클릭 → 반응 없음
+- 프로세스가 순간적으로 시작되었다가 즉시 종료
+
+#### 원인 분석
+
+**Main.java 코드 확인**:
+```java
+@Command(name = "cft", ...)
+public class Main implements Callable<Integer> {
+    @Option(names = {"--gui", "-g"}, description = "GUI 모드로 실행")
+    private boolean guiMode;
+
+    @Parameters(index = "0", description = "분석할 프로젝트 경로", arity = "0..1")
+    private String projectPath;
+
+    @Override
+    public Integer call() {
+        if (guiMode) {
+            SwingUtilities.invokeLater(() -> new MainFrame().setVisible(true));
+            return 0;
+        }
+        // CLI 모드: projectPath 필수
+        if (projectPath == null) {
+            spec.commandLine().usage(System.out);
+            return 1;  // 에러 종료
+        }
+        // ...
+    }
+}
+```
+
+- jpackage 기본 실행 시 **인자 없이** 실행됨
+- `guiMode = false` (기본값)
+- `projectPath = null` (인자 없음)
+- CLI 모드로 진입 → 경로 없어서 즉시 종료
+
+**CFT.cfg 파일 확인**:
+```ini
+[Application]
+app.classpath=$APPDIR\code-flow-tracer.jar
+app.mainclass=com.codeflow.Main
+
+[JavaOptions]
+java-options=-Djpackage.app-version=1.0.0
+java-options=-Dfile.encoding=UTF-8
+```
+→ `--gui` 인자가 설정되지 않음
+
+#### 최종 해결
+build.gradle의 jpackage 태스크에 `--arguments` 옵션 추가:
+
+```groovy
+task jpackage(type: Exec, dependsOn: shadowJar) {
+    commandLine jpackagePath,
+        // ... 기존 옵션들 ...
+        '--java-options', '-Dfile.encoding=UTF-8',
+        '--arguments', '--gui'  // ← 추가
+}
+```
+
+**효과**:
+- CFT.cfg에 `app.mainjar.argument.1=--gui` 자동 추가
+- exe 실행 시 GUI 모드로 바로 시작
+
+#### 대안 설계 고려
+향후 개선 시 Main.java 자체를 수정하는 방법도 있음:
+```java
+// 인자 없이 실행하면 기본적으로 GUI 모드
+if (projectPath == null && !guiMode) {
+    guiMode = true;  // 기본값을 GUI로
+}
+```
+→ 현재는 CLI 도구로서의 일관성을 위해 유지
+
+#### 배운 점
+- jpackage로 GUI 앱 배포 시 기본 실행 인자 설정 필수
+- CLI/GUI 겸용 앱은 기본 동작 모드를 명확히 정의해야 함
+- `--arguments` 옵션으로 런처 기본 인자 설정 가능
+- CFT.cfg 파일을 확인하면 실제 전달되는 인자 확인 가능
+
+---
+
 ## 자주 발생하는 문제
 
 ### Gradle 빌드 관련

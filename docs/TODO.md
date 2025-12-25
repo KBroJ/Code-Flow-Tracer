@@ -215,7 +215,10 @@
 - [ ] 도커 이미지
 
 ### 설치파일/패키징
-- [ ] jpackage로 Windows 설치파일 생성 (.exe, .msi)
+- [x] jpackage로 Windows 설치파일 생성 (.exe) ✅ 2025-12-25
+- [x] 설치 UI 바로가기 체크박스 간격 수정 ✅ 2025-12-25
+- [x] 설치 삭제 시 설정(레지스트리) 자동 정리 ✅ 2025-12-25
+- [ ] 현대적 폴더 브라우저 UI (IFileDialog) - C# CustomAction 필요, 복잡도 높음
 - [ ] jlink로 경량 JRE 번들 생성 (폐쇄망 배포용, ~40MB)
 - [ ] 배치 스크립트 포함 배포 패키지 (Portable JDK + JAR)
 
@@ -233,6 +236,10 @@
 | #12 | HTML 박스 문자 정렬 불일치 (HTML table로 해결) | ✅ 해결 | 2025-12-24 |
 | #13 | JSplitPane 내부 컴포넌트 가시성 제어 (setDividerLocation 사용) | ✅ 해결 | 2025-12-25 |
 | #14 | 분석 요약 레이아웃 정렬 (Leader Dots로 해결) | ✅ 해결 | 2025-12-25 |
+| #15 | jpackage WiX Toolset 필요 (WiX 3.14 설치로 해결) | ✅ 해결 | 2025-12-25 |
+| #16 | WiX 6.0과 JDK 21 호환성 문제 (WiX 3.14 사용) | ✅ 해결 | 2025-12-25 |
+| #17 | jpackage description 한글 인코딩 오류 (영문으로 변경) | ✅ 해결 | 2025-12-25 |
+| #18 | jpackage exe 실행 시 아무 반응 없음 (--arguments --gui 추가) | ✅ 해결 | 2025-12-25 |
 
 ---
 
