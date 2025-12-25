@@ -76,16 +76,29 @@ java -jar code-flow-tracer.jar -p /path/to/project -s detailed
 | **엑셀 출력** | 호출 흐름 + SQL 목록 시트 | ✅ 완료 |
 | **마크다운 출력** | 문서화용 출력 형식 | ⏳ 예정 |
 | **Desktop GUI** | Swing 기반, FlatLaf 다크 테마 | ✅ 완료 |
+| **Windows 설치 파일** | JRE 번들 포함, Java 설치 불필요 | ✅ 완료 |
 | **전자정부프레임워크** | 레거시 SI 환경 특화 지원 | ✅ 지원 |
 
 ---
 
 ## 빠른 시작
 
-### 요구사항
+### 방법 1: 설치 파일 (권장)
+
+Windows 사용자는 설치 파일을 다운로드하여 실행하면 됩니다. **Java 설치가 필요 없습니다.**
+
+```
+CFT-1.0.0.exe  (약 77MB, JRE 17 번들 포함)
+```
+
+설치 후 바탕화면 또는 시작 메뉴에서 **CFT** 실행
+
+### 방법 2: JAR 직접 실행
+
+#### 요구사항
 - Java 17 이상
 
-### 빌드 & 실행
+#### 빌드 & 실행
 ```bash
 # 빌드
 ./gradlew build
@@ -146,7 +159,9 @@ javaw -jar code-flow-tracer.jar --gui
 code-flow-tracer/
 ├── CLAUDE.md                 # 프로젝트 규칙 (AI 어시스턴트용)
 ├── README.md                 # 이 문서
+├── VERSION.md                # 버전 히스토리
 ├── build.gradle
+├── installer-resources/      # jpackage 커스텀 리소스
 ├── docs/                     # 문서
 │   ├── PROJECT_PLAN.md      # 프로젝트 기획 (러너스하이)
 │   ├── DESIGN.md            # 전체 설계

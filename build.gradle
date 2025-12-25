@@ -5,7 +5,7 @@ plugins {
 }
 
 group = 'com.codeflow'
-version = '1.0.0-SNAPSHOT'
+version = '1.0.0'
 
 java {
     sourceCompatibility = JavaVersion.VERSION_17
@@ -70,4 +70,45 @@ tasks.named('test') {
 // 인코딩 설정
 tasks.withType(JavaCompile) {
     options.encoding = 'UTF-8'
+}
+
+// jpackage 설정 (Windows 설치 파일 생성)
+ext {
+    appName = 'CFT'
+    appDescription = 'Code Flow Tracer - Java Call Flow Analyzer'
+    appVendor = 'KBroJ'
+    appVersion = version
+    installerDir = file("${buildDir}/installer")
+}
+
+task jpackage(type: Exec, dependsOn: shadowJar) {
+    group = 'distribution'
+    description = 'jpackage로 Windows 설치 파일 생성'
+
+    doFirst {
+        // installer 출력 디렉토리 생성
+        installerDir.mkdirs()
+    }
+
+    def jpackagePath = System.getenv('JAVA_HOME') ?
+        "${System.getenv('JAVA_HOME')}/bin/jpackage" : 'jpackage'
+
+    commandLine jpackagePath,
+        '--type', 'exe',
+        '--name', appName,
+        '--description', appDescription,
+        '--vendor', appVendor,
+        '--app-version', appVersion,
+        '--input', "${buildDir}/libs",
+        '--main-jar', 'code-flow-tracer.jar',
+        '--main-class', 'com.codeflow.Main',
+        '--dest', installerDir.absolutePath,
+        '--win-dir-chooser',
+        '--win-menu',
+        '--win-menu-group', appName,
+        '--win-shortcut',
+        '--win-shortcut-prompt',
+        '--java-options', '-Dfile.encoding=UTF-8',
+        '--arguments', '--gui',
+        '--resource-dir', "${projectDir}/installer-resources"
 }

@@ -1001,3 +1001,89 @@ Week 4: 개선 + 회고     ░░░░░░░░░░░░░░░░░�
 - JSplitPane은 setVisible이 아닌 dividerLocation으로 제어
 - 커스텀 페인팅으로 간단한 UI 요소(점선) 직접 구현 가능
 - Ctrl+휠 이벤트 처리 시 `e.consume()`으로 스크롤 이벤트 차단 필요
+
+---
+
+### 2025-12-25 (수) - Session 15
+
+#### Session 15: jpackage 설치 파일 생성
+
+**오늘 한 일**
+1. **버전 관리 체계 수립**
+   - `VERSION.md` 생성 (버전 히스토리 관리)
+   - Semantic Versioning 규칙 정립
+   - v1.0.0 첫 정식 릴리즈 결정
+
+2. **jpackage 설정 구현**
+   - build.gradle에 jpackage task 추가
+   - 앱 이름: CFT (Code Flow Tracer)
+   - 설치 옵션: 경로 선택, 시작 메뉴, 바탕화면 바로가기
+
+3. **WiX Toolset 호환성 문제 해결**
+   - Issue #015: jpackage에 WiX Toolset 필요
+   - Issue #016: WiX 6.0과 JDK 21 호환성 문제
+   - WiX 3.14 설치로 해결
+
+4. **한글 인코딩 문제 해결**
+   - jpackage description에 한글 사용 시 WiX 빌드 실패
+   - 영문 description으로 변경하여 해결
+
+5. **설치 파일 생성 성공**
+   - `CFT-1.0.0.exe` (77.3 MB) 생성
+   - JRE 17 번들 포함
+   - 폐쇄망에서 Java 없이 실행 가능
+
+6. **exe 실행 문제 해결**
+   - Issue #018: exe 더블클릭 시 아무 반응 없음
+   - 원인: `--gui` 인자 없이 CLI 모드로 실행 → 즉시 종료
+   - 해결: jpackage `--arguments '--gui'` 옵션 추가
+
+7. **설치 UI 커스터마이징**
+   - `installer-resources/ShortcutPromptDlg.wxs` 생성
+   - 바로가기 체크박스 간격 축소 (Y: 140→180 에서 140→165로 변경)
+   - build.gradle에 `--resource-dir` 옵션 추가
+
+8. **현대적 폴더 브라우저 검토**
+   - WiX 기본 `BrowseDlg`가 구식 Windows XP 스타일
+   - Vista+ 스타일 IFileDialog 적용하려면 C# CustomAction 필요
+   - STA 스레드 처리, 커스텀 DLL 빌드 등 복잡도 높음
+   - → Backlog로 이동 (MVP 범위 초과)
+
+9. **설치 삭제 시 설정 자동 정리**
+   - Java Preferences API가 레지스트리에 설정 저장
+   - 저장 위치: `HKCU\Software\JavaSoft\Prefs\com\codeflow\ui`
+   - 커스텀 `main.wxs`에 `RemoveRegistryKey` 추가
+   - 설치 삭제 시 레지스트리 자동 정리 구현
+
+**기술 선택 이유**
+1. **jpackage 선택 이유**
+   - JDK 14+에서 기본 제공 (추가 도구 불필요)
+   - 네이티브 설치 파일 생성 (.exe, .msi)
+   - JRE 번들링으로 Java 설치 불필요
+
+2. **WiX 3.14 선택 이유**
+   - JDK 21 (LTS) 환경에서는 WiX 4/5/6 미지원
+   - JDK 24+에서만 WiX 4+ 지원
+   - 대부분의 개발자가 WiX 3.x 사용 (안정성)
+
+**트러블슈팅 요약**
+| 문제 | 원인 | 해결 |
+|------|------|------|
+| WiX tools not found | WiX 6.0은 candle.exe/light.exe 없음 | WiX 3.14 설치 |
+| exit code 311 | description에 한글 포함 | 영문으로 변경 |
+| exe 실행 무반응 | --gui 인자 없이 CLI 모드 실행 | --arguments '--gui' 추가 |
+| 바로가기 체크박스 간격 | 기본 Y좌표 140→180 (40px) | 140→165 (25px)로 수정 |
+
+**배운 점**
+- jpackage는 OS별로 추가 도구 필요 (Windows: WiX)
+- WiX 버전과 JDK 버전 간 호환성 매트릭스 존재
+- 설치 파일 메타데이터는 ASCII/영문 권장 (인코딩 문제 방지)
+- 한글 사용 시 커스텀 로컬라이제이션 파일 필요 (Codepage 949 설정)
+- CLI/GUI 겸용 앱 배포 시 기본 실행 인자 설정 필수
+- jpackage `--resource-dir`로 WiX 템플릿 커스터마이징 가능
+- 현대적 폴더 브라우저(IFileDialog) 적용은 C# CustomAction 필요 (복잡)
+- Java Preferences API는 Windows에서 레지스트리에 저장됨 (HKCU)
+- Program Files는 쓰기 권한이 없어 설정 파일을 설치 폴더에 저장 불가
+- WiX RemoveRegistryKey로 설치 삭제 시 레지스트리 자동 정리 가능
+
+**참고**: 각 이슈 상세 내용은 ISSUES.md (#015~#018) 참조
