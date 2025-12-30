@@ -49,16 +49,6 @@ public class MethodCall {
     }
 
     /**
-     * 인자를 문자열로 반환
-     */
-    public String getArgumentsAsString() {
-        if (arguments == null || arguments.isEmpty()) {
-            return "";
-        }
-        return String.join(", ", arguments);
-    }
-
-    /**
      * Service, DAO 호출로 추정되는지 확인
      */
     public boolean isServiceOrDaoCall() {

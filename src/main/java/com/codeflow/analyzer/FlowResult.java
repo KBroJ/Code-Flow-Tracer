@@ -136,44 +136,6 @@ public class FlowResult {
     }
 
     /**
-     * 특정 URL 패턴에 해당하는 플로우 찾기
-     */
-    public List<FlowNode> findFlowsByUrl(String urlPattern) {
-        List<FlowNode> matched = new ArrayList<>();
-        for (FlowNode flow : flows) {
-            if (flow.getUrlMapping() != null && flow.getUrlMapping().contains(urlPattern)) {
-                matched.add(flow);
-            }
-        }
-        return matched;
-    }
-
-    /**
-     * 특정 클래스의 플로우 찾기
-     */
-    public List<FlowNode> findFlowsByClass(String className) {
-        List<FlowNode> matched = new ArrayList<>();
-        for (FlowNode flow : flows) {
-            if (containsClass(flow, className)) {
-                matched.add(flow);
-            }
-        }
-        return matched;
-    }
-
-    private boolean containsClass(FlowNode node, String className) {
-        if (node.getClassName() != null && node.getClassName().contains(className)) {
-            return true;
-        }
-        for (FlowNode child : node.getChildren()) {
-            if (containsClass(child, className)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
      * 분석 요약 정보 반환
      */
     public String getSummary() {
