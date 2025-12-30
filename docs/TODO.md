@@ -206,12 +206,12 @@
 - [ ] 이슈 데이터 저장/불러오기 (JSON)
 
 ### 향후 (v1.2+)
-**설정 저장 방식 통합 ([#020](ISSUES.md))**
-- [ ] Registry 설정 → JSON 마이그레이션 로직 구현
-- [ ] MainFrame.java Preferences 사용 제거
-- [ ] SessionData에 recentPaths 필드 추가
-- [ ] 기존 사용자 설정 마이그레이션 테스트
-- [ ] GUI 삭제 메뉴 통합 ("설정 초기화" + "세션 삭제" → 단일 메뉴)
+**설정 저장 방식 통합 ([#020](ISSUES.md))** ✅ 완료 (2025-12-31)
+- [x] Registry 설정 → JSON 마이그레이션 로직 구현
+- [x] MainFrame.java Preferences 사용 제거
+- [x] SessionData에 recentPaths 필드 추가
+- [x] 기존 사용자 설정 마이그레이션 테스트
+- [x] GUI 삭제 메뉴 통합 ("설정 초기화" + "세션 삭제" → 단일 메뉴)
 
 **분기 분석**
 - [ ] if/switch 문 조건 추출
@@ -296,7 +296,7 @@
 | #17 | jpackage description 한글 인코딩 오류 (영문으로 변경) | ✅ 해결 | 2025-12-25 |
 | #18 | jpackage exe 실행 시 아무 반응 없음 (--arguments --gui 추가) | ✅ 해결 | 2025-12-25 |
 | #19 | Gradle clean 시 빌드 디렉토리 파일 잠금 (출력 경로 변경으로 우회) | ✅ 해결 | 2025-12-26 |
-| #20 | 설정 이중 저장 - Registry + JSON (v1.2에서 JSON 통합 예정) | 🟡 진행중 | - |
+| #20 | 설정 이중 저장 - Registry + JSON → JSON 단일 저장으로 통합 완료 | ✅ 해결 | 2025-12-31 |
 
 ---
 

@@ -550,17 +550,17 @@ UserService       UserServiceImpl, UserServiceV2, UserServiceV3
 
 ### 9.1 설정 저장 방식
 
-#### 현재 상태 (v1.0 ~ v1.1)
+#### 현재 상태 (v1.1+)
 
-> ⚠️ **기술 부채**: 현재 설정이 2곳에 중복 저장되고 있습니다.
+> ✅ **해결 완료**: JSON 단일 저장으로 통합됨 (2025-12-31)
 
-| 저장소 | 저장 항목 | 도입 시점 |
-|--------|----------|----------|
-| Registry (Preferences API) | 최근 경로, URL 필터, 출력 스타일 | Session 13 (2025-12-24) |
-| JSON 파일 (`session.json`) | 분석 결과, URL 필터, 출력 스타일 | Session 18 (2025-12-30) |
+| 저장소 | 저장 항목 |
+|--------|----------|
+| JSON 파일 (`~/.code-flow-tracer/session.json`) | 최근 경로, URL 필터, 출력 스타일, 분석 결과 |
 
-- URL 필터, 출력 스타일이 **두 곳에 중복 저장**됨
-- 향후 v1.2에서 JSON 단일 저장으로 통합 예정
+- Registry (Preferences API) 사용 제거
+- 모든 설정이 JSON 파일 하나로 통합됨
+- GUI 삭제 메뉴도 1개로 통합: "설정/세션 초기화"
 
 #### 저장 방식 비교
 
@@ -574,9 +574,9 @@ UserService       UserServiceImpl, UserServiceV2, UserServiceV3
 | 삭제 시 정리 | WiX RemoveRegistryKey 필요 | WiX RemoveFile로 간단 |
 | 표준 API | ✅ Java 표준 | ❌ Gson 의존 |
 
-#### 권장 해결 방향 (v1.2 예정)
+#### 구현된 해결 방향 (2025-12-31 완료)
 
-**JSON 단일 저장으로 통합**:
+**JSON 단일 저장으로 통합 완료**:
 
 ```json
 // ~/.code-flow-tracer/session.json
@@ -597,16 +597,14 @@ UserService       UserServiceImpl, UserServiceV2, UserServiceV3
 - 설치 삭제 시 정리 간단
 - GUI 메뉴 단순화 (삭제 메뉴 통합)
 
-**GUI 메뉴 현재 상태**:
+**GUI 메뉴 (통합 완료)**:
 ```
 설정 버튼 클릭 → 팝업 메뉴:
-├── "설정 초기화" → Registry만 삭제 (prefs.clear())
-└── "세션 삭제" → JSON 파일만 삭제 (sessionManager.clearSession())
+└── "설정/세션 초기화" → JSON 파일 삭제 (sessionManager.clearSession())
 ```
 
-**GUI 메뉴 통합 계획** (v1.2):
-- 현재: "설정 초기화" + "세션 삭제" (2개)
-- 변경: "설정/세션 초기화" (1개) → JSON 파일 삭제
+- 기존 2개 메뉴를 1개로 통합
+- 모든 설정과 분석 결과가 함께 삭제됨
 
 **마이그레이션 전략**:
 1. 앱 시작 시 Registry에서 설정 읽기 시도

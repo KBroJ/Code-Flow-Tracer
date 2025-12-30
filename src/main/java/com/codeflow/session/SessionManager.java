@@ -83,7 +83,7 @@ public class SessionManager {
     }
 
     /**
-     * 세션 불러오기
+     * 세션 불러오기 (분석 결과 포함)
      *
      * @return 저장된 세션 데이터, 없거나 오류 시 null
      */
@@ -111,6 +111,51 @@ public class SessionManager {
             log.error("세션 로드 실패: {}", e.getMessage(), e);
             return null;
         }
+    }
+
+    /**
+     * 설정만 불러오기 (분석 결과 없어도 됨)
+     *
+     * @return 저장된 세션 데이터 (설정만), 없거나 오류 시 null
+     */
+    public SessionData loadSettings() {
+        if (!Files.exists(SESSION_FILE)) {
+            log.debug("세션 파일 없음: {}", SESSION_FILE);
+            return null;
+        }
+
+        try {
+            String json = Files.readString(SESSION_FILE, StandardCharsets.UTF_8);
+            SessionData data = gson.fromJson(json, SessionData.class);
+
+            if (data != null) {
+                log.info("설정 로드 완료");
+                return data;
+            } else {
+                return null;
+            }
+
+        } catch (Exception e) {
+            log.error("설정 로드 실패: {}", e.getMessage(), e);
+            return null;
+        }
+    }
+
+    /**
+     * 설정만 저장 (분석 결과는 유지)
+     */
+    public boolean saveSettings(java.util.List<String> recentPaths, String urlFilter, String outputStyle) {
+        // 기존 세션 로드 (분석 결과 유지를 위해)
+        SessionData data = loadSettings();
+        if (data == null) {
+            data = new SessionData();
+        }
+
+        data.setRecentPaths(recentPaths);
+        data.setUrlFilter(urlFilter);
+        data.setOutputStyle(outputStyle);
+
+        return saveSession(data);
     }
 
     /**

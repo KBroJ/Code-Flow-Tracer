@@ -26,7 +26,6 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.prefs.Preferences;
 
 /**
  * Code Flow Tracer GUI 메인 프레임
@@ -42,12 +41,8 @@ public class MainFrame extends JFrame {
     private static final int DEFAULT_HEIGHT = 900;
     private static final int SIDE_PANEL_WIDTH = 280;
 
-    // 설정 저장 (Preferences API)
-    private static final String PREF_RECENT_PATHS = "recentPaths";
-    private static final String PREF_URL_FILTER = "urlFilter";
-    private static final String PREF_OUTPUT_STYLE = "outputStyle";
+    // 설정 관련 상수
     private static final int MAX_RECENT_PATHS = 10;
-    private final Preferences prefs = Preferences.userNodeForPackage(MainFrame.class);
 
     // 레이아웃 컴포넌트
     private JPanel sidePanel;
@@ -616,61 +611,34 @@ public class MainFrame extends JFrame {
     private JPopupMenu createSettingsPopupMenu() {
         JPopupMenu popup = new JPopupMenu();
 
-        JMenuItem clearSettingsItem = new JMenuItem("설정 초기화");
-        clearSettingsItem.setToolTipText("저장된 최근 경로 및 옵션 설정을 모두 삭제합니다");
-        clearSettingsItem.addActionListener(e -> handleClearSettings());
-        popup.add(clearSettingsItem);
-
-        JMenuItem clearSessionItem = new JMenuItem("세션 삭제");
-        clearSessionItem.setToolTipText("저장된 분석 결과를 삭제합니다");
-        clearSessionItem.addActionListener(e -> handleClearSession());
-        popup.add(clearSessionItem);
+        JMenuItem clearAllItem = new JMenuItem("설정/세션 초기화");
+        clearAllItem.setToolTipText("저장된 모든 설정 및 분석 결과를 삭제합니다");
+        clearAllItem.addActionListener(e -> handleClearAll());
+        popup.add(clearAllItem);
 
         return popup;
     }
 
     /**
-     * 세션 삭제 핸들러
+     * 설정/세션 모두 삭제 핸들러
      */
-    private void handleClearSession() {
+    private void handleClearAll() {
         int confirm = JOptionPane.showConfirmDialog(
                 this,
-                "저장된 분석 결과(세션)를 삭제합니다.\n계속하시겠습니까?",
-                "세션 삭제",
+                "저장된 모든 설정 및 분석 결과를 삭제합니다.\n(최근 경로, 옵션 설정, 분석 결과 포함)\n계속하시겠습니까?",
+                "설정/세션 초기화",
                 JOptionPane.YES_NO_OPTION,
                 JOptionPane.WARNING_MESSAGE
         );
 
         if (confirm == JOptionPane.YES_OPTION) {
             if (sessionManager.clearSession()) {
-                statusLabel.setText("세션이 삭제되었습니다.");
-            } else {
-                showError("세션 삭제 실패");
-            }
-        }
-    }
-
-    /**
-     * 설정 초기화 핸들러
-     */
-    private void handleClearSettings() {
-        int confirm = JOptionPane.showConfirmDialog(
-                this,
-                "저장된 모든 설정을 삭제합니다.\n계속하시겠습니까?",
-                "설정 초기화",
-                JOptionPane.YES_NO_OPTION,
-                JOptionPane.WARNING_MESSAGE
-        );
-
-        if (confirm == JOptionPane.YES_OPTION) {
-            try {
-                prefs.clear();
                 projectPathComboBox.removeAllItems();
                 urlFilterField.setText("");
                 rbNormal.setSelected(true);
-                statusLabel.setText("설정이 초기화되었습니다.");
-            } catch (Exception ex) {
-                showError("설정 초기화 실패: " + ex.getMessage());
+                statusLabel.setText("설정 및 세션이 초기화되었습니다.");
+            } else {
+                showError("초기화 실패");
             }
         }
     }
@@ -899,17 +867,34 @@ public class MainFrame extends JFrame {
     // ===== 설정 저장/로드 =====
 
     /**
-     * 설정 로드
+     * 설정 로드 (JSON 파일에서)
      */
     private void loadSettings() {
-        // 프로젝트 경로
-        loadRecentPaths();
+        SessionData settings = sessionManager.loadSettings();
+        if (settings == null) {
+            return;
+        }
+
+        // 최근 프로젝트 경로
+        List<String> recentPaths = settings.getRecentPaths();
+        if (recentPaths != null) {
+            for (String path : recentPaths) {
+                if (path != null && !path.trim().isEmpty() && Files.exists(Paths.get(path.trim()))) {
+                    projectPathComboBox.addItem(path.trim());
+                }
+            }
+            if (projectPathComboBox.getItemCount() > 0) {
+                projectPathComboBox.setSelectedIndex(0);
+            }
+        }
 
         // URL 필터
-        urlFilterField.setText(prefs.get(PREF_URL_FILTER, ""));
+        String urlFilter = settings.getUrlFilter();
+        urlFilterField.setText(urlFilter != null ? urlFilter : "");
 
         // 출력 스타일
-        String style = prefs.get(PREF_OUTPUT_STYLE, "normal");
+        String style = settings.getOutputStyle();
+        if (style == null) style = "normal";
         switch (style) {
             case "compact":
                 rbCompact.setSelected(true);
@@ -919,24 +904,6 @@ public class MainFrame extends JFrame {
                 break;
             default:
                 rbNormal.setSelected(true);
-        }
-    }
-
-    /**
-     * 최근 프로젝트 경로 로드
-     */
-    private void loadRecentPaths() {
-        String pathsStr = prefs.get(PREF_RECENT_PATHS, "");
-        if (!pathsStr.isEmpty()) {
-            String[] paths = pathsStr.split("\\|");
-            for (String path : paths) {
-                if (!path.trim().isEmpty() && Files.exists(Paths.get(path.trim()))) {
-                    projectPathComboBox.addItem(path.trim());
-                }
-            }
-            if (projectPathComboBox.getItemCount() > 0) {
-                projectPathComboBox.setSelectedIndex(0);
-            }
         }
     }
 
@@ -960,15 +927,21 @@ public class MainFrame extends JFrame {
         }
         projectPathComboBox.setSelectedItem(newPath);
 
-        prefs.put(PREF_RECENT_PATHS, String.join("|", paths));
+        // JSON에 저장
+        sessionManager.saveSettings(paths, urlFilterField.getText().trim(), getSelectedStyle());
     }
 
     /**
-     * 설정 저장
+     * 설정 저장 (JSON 파일에)
      */
     private void saveSettings() {
-        prefs.put(PREF_URL_FILTER, urlFilterField.getText().trim());
-        prefs.put(PREF_OUTPUT_STYLE, getSelectedStyle());
+        // 현재 ComboBox에서 경로 목록 수집
+        List<String> paths = new ArrayList<>();
+        for (int i = 0; i < projectPathComboBox.getItemCount(); i++) {
+            paths.add(projectPathComboBox.getItemAt(i));
+        }
+
+        sessionManager.saveSettings(paths, urlFilterField.getText().trim(), getSelectedStyle());
     }
 
     // ===== 세션 저장/복원 =====
