@@ -1,6 +1,6 @@
 # 전체 설계 (Architecture)
 
-> 최종 수정일: 2025-12-25
+> 최종 수정일: 2025-12-30
 
 ## 1. 프로젝트 개요
 
@@ -346,7 +346,12 @@ code-flow-result.xlsx (이미 존재)
 - [x] 엑셀 출력 (요약, API 목록, 호출 흐름 시트)
 - [x] Swing GUI (FlatLaf 다크 테마)
 
-### Phase 2 (향후)
+### Phase 2 (v1.1 - 기능 확장)
+- [ ] 세션 영속성 (분석 결과 저장/복원) - [#15](https://github.com/KBroJ/Code-Flow-Tracer/issues/15)
+- [ ] 작업 관리 탭 (Jira 스타일 칸반 보드) - [#16](https://github.com/KBroJ/Code-Flow-Tracer/issues/16)
+
+### Phase 3 (향후)
+- [ ] 분기 조건 파라미터 추출 (if/switch 분석)
 - [ ] MyBatis 어노테이션 지원
 - [ ] Spring Data JPA 지원
 - [ ] 헥사고날 아키텍처 지원
@@ -611,3 +616,226 @@ HKCU\Software\CFT                              ← 설치 마커
 ```powershell
 Remove-Item -Path "HKCU:\Software\JavaSoft\Prefs\com\codeflow" -Recurse
 ```
+
+---
+
+## 10. 세션 영속성 (v1.1) - [#15](https://github.com/KBroJ/Code-Flow-Tracer/issues/15)
+
+### 10.1 개요
+
+앱 종료 후 재시작해도 마지막 분석 결과가 유지되어 바로 이어서 작업 가능
+
+### 10.2 저장 항목
+
+| 항목 | 저장 위치 | 형식 |
+|------|----------|------|
+| 프로젝트 경로 | Preferences | String |
+| 분석 결과 (FlowResult) | 파일 | JSON |
+| URL 필터 | Preferences | String |
+| 출력 스타일 | Preferences | String |
+
+### 10.3 세션 파일 경로
+
+```
+~/.code-flow-tracer/session.json
+```
+
+### 10.4 JSON 구조
+
+```json
+{
+  "projectPath": "/path/to/project",
+  "analyzedAt": "2025-12-30T14:30:00",
+  "results": [
+    {
+      "urlPattern": "/api/user/list",
+      "httpMethod": "GET",
+      "parameters": ["userId", "pageNo"],
+      "rootNode": {
+        "className": "UserController",
+        "methodName": "selectUserList",
+        "classType": "CONTROLLER",
+        "children": [...]
+      }
+    }
+  ]
+}
+```
+
+### 10.5 동작 흐름
+
+```
+앱 시작
+  ↓
+세션 파일 존재?
+  ├── Yes → JSON 역직렬화 → 결과 패널에 표시
+  └── No  → 빈 화면
+
+분석 실행
+  ↓
+FlowResult 생성
+  ↓
+JSON 직렬화 → session.json 저장
+```
+
+### 10.6 구현 클래스
+
+```java
+// 신규 클래스
+public class SessionManager {
+    private static final Path SESSION_FILE =
+        Paths.get(System.getProperty("user.home"), ".code-flow-tracer", "session.json");
+
+    public void saveSession(SessionData data);
+    public SessionData loadSession();
+    public void clearSession();
+}
+
+public class SessionData {
+    String projectPath;
+    LocalDateTime analyzedAt;
+    List<FlowResult> results;
+}
+```
+
+### 10.7 라이브러리
+
+- **Gson** (com.google.code.gson:gson:2.10.1)
+  - 선택 이유: 가볍고, 추가 의존성 없음, 직관적인 API
+
+---
+
+## 11. 작업 관리 탭 (v1.1) - [#16](https://github.com/KBroJ/Code-Flow-Tracer/issues/16)
+
+### 11.1 개요
+
+폐쇄망 SI 환경에서 Notion, Jira 등을 사용할 수 없는 상황을 위한 내장 작업 관리 도구
+
+### 11.2 UI 레이아웃
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  [분석 결과]  [작업 관리]                                          │
+├─────────────────────────────────────────────────────────────────┤
+│  [+ 이슈 추가]                                                    │
+├───────────────────┬───────────────────┬─────────────────────────┤
+│     📋 할 일 (3)   │   🔄 진행 중 (1)   │     ✅ 완료 (5)          │
+├───────────────────┼───────────────────┼─────────────────────────┤
+│ ┌───────────────┐ │ ┌───────────────┐ │ ┌─────────────────────┐ │
+│ │ CFT-004       │ │ │ CFT-003       │ │ │ ~~CFT-001~~         │ │
+│ │ 세션 영속성    │ │ │ 블로그 작성    │ │ │ ~~MVP 개발~~        │ │
+│ │ 🔴 높음       │ │ │ 🟡 보통       │ │ │ 2025-12-25 완료     │ │
+│ │ ~12/31       │ │ │ ~12/30       │ │ └─────────────────────┘ │
+│ └───────────────┘ │ └───────────────┘ │ ┌─────────────────────┐ │
+│ ┌───────────────┐ │                   │ │ ~~CFT-002~~         │ │
+│ │ CFT-005       │ │                   │ │ ~~GUI 구현~~         │ │
+│ │ 칸반 보드 구현  │ │                   │ │ 2025-12-26 완료     │ │
+│ │ 🟡 보통       │ │                   │ └─────────────────────┘ │
+│ │ ~01/02       │ │                   │                         │
+│ └───────────────┘ │                   │                         │
+└───────────────────┴───────────────────┴─────────────────────────┘
+                              │
+         이슈 카드 클릭 시 상세 패널 표시
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  이슈 상세                                         [저장] [삭제] │
+├─────────────────────────────────────────────────────────────────┤
+│  번호: CFT-003                                                   │
+│  제목: [블로그 작성                                        ]     │
+│  설명: [호출흐름 재귀탐색 블로그 포스트 작성              ]     │
+│        [                                                  ]     │
+│  상태: [진행 중 ▼]  (드롭다운으로 변경)                          │
+│  우선순위: [🟡 보통 ▼]                                           │
+│  시작일: [2025-12-28]  마감일: [2025-12-30]                      │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 11.3 데이터 모델
+
+```java
+public class Issue {
+    String issueId;          // CFT-001, CFT-002...
+    String title;            // 제목
+    String description;      // 설명 (여러 줄)
+    IssueStatus status;      // TODO, IN_PROGRESS, DONE
+    IssuePriority priority;  // HIGH, MEDIUM, LOW
+    LocalDate startDate;     // 시작일
+    LocalDate dueDate;       // 마감일
+    LocalDateTime createdAt; // 생성일시
+    LocalDateTime updatedAt; // 수정일시
+}
+
+public enum IssueStatus {
+    TODO("할 일"),
+    IN_PROGRESS("진행 중"),
+    DONE("완료");
+}
+
+public enum IssuePriority {
+    HIGH("🔴 높음"),
+    MEDIUM("🟡 보통"),
+    LOW("🟢 낮음");
+}
+```
+
+### 11.4 저장 구조
+
+```
+~/.code-flow-tracer/issues.json
+```
+
+```json
+{
+  "nextIssueNumber": 6,
+  "issues": [
+    {
+      "issueId": "CFT-001",
+      "title": "MVP 개발",
+      "description": "기본 파싱 및 분석 기능 구현",
+      "status": "DONE",
+      "priority": "HIGH",
+      "startDate": "2025-12-16",
+      "dueDate": "2025-12-25",
+      "createdAt": "2025-12-16T09:00:00",
+      "updatedAt": "2025-12-25T18:30:00"
+    }
+  ]
+}
+```
+
+### 11.5 기능 목록
+
+| 기능 | 설명 |
+|------|------|
+| 이슈 추가 | + 버튼으로 새 이슈 생성, 자동 번호 부여 (CFT-XXX) |
+| 이슈 수정 | 카드 클릭 → 상세 패널에서 편집 |
+| 이슈 삭제 | 상세 패널에서 삭제 버튼 |
+| 상태 변경 | 드롭다운으로 상태 변경 (칸반 컬럼 이동) |
+| 취소선 표시 | 완료 상태 이슈는 제목에 취소선 |
+| 우선순위 표시 | 카드에 아이콘으로 표시 |
+| 마감일 표시 | 카드 하단에 간략히 표시 |
+| 데이터 영속성 | JSON 파일로 저장/불러오기 |
+
+### 11.6 구현 클래스
+
+```
+com.codeflow.ui/
+├── MainFrame.java          # 탭 추가
+├── TaskPanel.java          # 작업 관리 메인 패널 (신규)
+├── KanbanColumn.java       # 칸반 컬럼 (신규)
+├── IssueCard.java          # 이슈 카드 컴포넌트 (신규)
+├── IssueDetailPanel.java   # 이슈 상세/편집 패널 (신규)
+└── IssueManager.java       # 이슈 CRUD + 저장/로드 (신규)
+```
+
+### 11.7 설계 결정
+
+**왜 드래그앤드롭이 아닌 드롭다운인가?**
+- Swing에서 드래그앤드롭 구현 복잡도 높음
+- 드롭다운도 1클릭으로 상태 변경 가능
+- 구현 시간 단축 (2-3일 → 1-2일)
+
+**왜 별도 탭인가?**
+- 분석 결과와 작업 관리는 독립적 기능
+- 탭으로 분리하여 UI 복잡도 감소
+- 향후 확장 용이 (다른 프로젝트의 작업도 관리 가능)
