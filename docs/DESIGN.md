@@ -93,6 +93,10 @@ com.codeflow/
 │   ├── ConsoleOutput.java    # 콘솔 출력
 │   └── ExcelOutput.java      # 엑셀 출력 (Apache POI)
 │
+├── session/                  # 세션 영속성 (v1.1)
+│   ├── SessionManager.java   # 세션 저장/로드/삭제
+│   └── SessionData.java      # 세션 데이터 (JSON 직렬화)
+│
 └── ui/                       # GUI
     ├── MainFrame.java        # 메인 윈도우
     └── ResultPanel.java      # 결과 표시 패널
@@ -347,7 +351,7 @@ code-flow-result.xlsx (이미 존재)
 - [x] Swing GUI (FlatLaf 다크 테마)
 
 ### Phase 2 (v1.1 - 기능 확장)
-- [ ] 세션 영속성 (분석 결과 저장/복원) - [#15](https://github.com/KBroJ/Code-Flow-Tracer/issues/15)
+- [x] 세션 영속성 (분석 결과 저장/복원) - [#15](https://github.com/KBroJ/Code-Flow-Tracer/issues/15) ✅
 - [ ] 작업 관리 탭 (Jira 스타일 칸반 보드) - [#16](https://github.com/KBroJ/Code-Flow-Tracer/issues/16)
 
 ### Phase 3 (향후)
@@ -619,7 +623,7 @@ Remove-Item -Path "HKCU:\Software\JavaSoft\Prefs\com\codeflow" -Recurse
 
 ---
 
-## 10. 세션 영속성 (v1.1) - [#15](https://github.com/KBroJ/Code-Flow-Tracer/issues/15)
+## 10. 세션 영속성 (v1.1) ✅ - [#15](https://github.com/KBroJ/Code-Flow-Tracer/issues/15)
 
 ### 10.1 개요
 

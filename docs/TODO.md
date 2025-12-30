@@ -186,10 +186,11 @@
 ## Week 4: 기능 확장 + 회고 🔄
 
 ### 2025-12-30 (월) - v1.1 기능 확장 🔄
-**세션 영속성 ([#15](https://github.com/KBroJ/Code-Flow-Tracer/issues/15))**
-- [ ] FlowResult JSON 직렬화/역직렬화
-- [ ] 앱 시작 시 마지막 분석 결과 복원
-- [ ] 세션 파일 저장 (~/.code-flow-tracer/session.json)
+**세션 영속성 ([#15](https://github.com/KBroJ/Code-Flow-Tracer/issues/15))** ✅
+- [x] FlowResult JSON 직렬화/역직렬화 (Gson)
+- [x] 앱 시작 시 마지막 분석 결과 복원
+- [x] 세션 파일 저장 (~/.code-flow-tracer/session.json)
+- [x] 세션 삭제 메뉴 추가 (설정 → 세션 삭제)
 
 **작업 관리 탭 - Jira 스타일 칸반 ([#16](https://github.com/KBroJ/Code-Flow-Tracer/issues/16))**
 - [ ] 작업 관리 탭 UI 추가

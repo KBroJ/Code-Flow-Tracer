@@ -8,6 +8,8 @@ import com.codeflow.parser.IBatisParser;
 import com.codeflow.parser.JavaSourceParser;
 import com.codeflow.parser.ParsedClass;
 import com.codeflow.parser.SqlInfo;
+import com.codeflow.session.SessionData;
+import com.codeflow.session.SessionManager;
 
 import com.formdev.flatlaf.FlatDarculaLaf;
 
@@ -95,6 +97,9 @@ public class MainFrame extends JFrame {
     private FlowResult currentResult;
     private Path currentProjectPath;
 
+    // 세션 관리
+    private final SessionManager sessionManager = new SessionManager();
+
     // 색상 상수
     private static final Color COLOR_SECTION_LABEL = new Color(78, 201, 176);  // 청록
     private static final Color COLOR_SEPARATOR = new Color(80, 80, 80);        // 구분선 (밝은 회색)
@@ -108,6 +113,7 @@ public class MainFrame extends JFrame {
         layoutComponents();
         setupEventHandlers();
         loadSettings();
+        restoreSession();
     }
 
     /**
@@ -615,7 +621,33 @@ public class MainFrame extends JFrame {
         clearSettingsItem.addActionListener(e -> handleClearSettings());
         popup.add(clearSettingsItem);
 
+        JMenuItem clearSessionItem = new JMenuItem("세션 삭제");
+        clearSessionItem.setToolTipText("저장된 분석 결과를 삭제합니다");
+        clearSessionItem.addActionListener(e -> handleClearSession());
+        popup.add(clearSessionItem);
+
         return popup;
+    }
+
+    /**
+     * 세션 삭제 핸들러
+     */
+    private void handleClearSession() {
+        int confirm = JOptionPane.showConfirmDialog(
+                this,
+                "저장된 분석 결과(세션)를 삭제합니다.\n계속하시겠습니까?",
+                "세션 삭제",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE
+        );
+
+        if (confirm == JOptionPane.YES_OPTION) {
+            if (sessionManager.clearSession()) {
+                statusLabel.setText("세션이 삭제되었습니다.");
+            } else {
+                showError("세션 삭제 실패");
+            }
+        }
     }
 
     /**
@@ -782,6 +814,9 @@ public class MainFrame extends JFrame {
                     saveRecentPath(projectPath.toString());
                     saveSettings();
 
+                    // 세션 저장 (분석 결과 영속성)
+                    saveSession();
+
                 } catch (Exception ex) {
                     String errorMsg = ex.getCause() != null ? ex.getCause().getMessage() : ex.getMessage();
                     showError("분석 중 오류 발생: " + errorMsg);
@@ -934,6 +969,78 @@ public class MainFrame extends JFrame {
     private void saveSettings() {
         prefs.put(PREF_URL_FILTER, urlFilterField.getText().trim());
         prefs.put(PREF_OUTPUT_STYLE, getSelectedStyle());
+    }
+
+    // ===== 세션 저장/복원 =====
+
+    /**
+     * 세션 저장 (분석 결과 포함)
+     */
+    private void saveSession() {
+        if (currentResult == null || currentProjectPath == null) {
+            return;
+        }
+
+        String urlFilter = urlFilterField.getText().trim();
+        String outputStyle = getSelectedStyle();
+
+        boolean saved = sessionManager.saveSession(
+                currentProjectPath.toString(),
+                currentResult,
+                urlFilter,
+                outputStyle
+        );
+
+        if (saved) {
+            System.out.println("세션 저장 완료: " + sessionManager.getSessionFilePath());
+        }
+    }
+
+    /**
+     * 세션 복원 (앱 시작 시 마지막 분석 결과 표시)
+     */
+    private void restoreSession() {
+        SessionData session = sessionManager.loadSession();
+        if (session == null || !session.isValid()) {
+            return;
+        }
+
+        // 프로젝트 경로가 존재하는지 확인
+        Path projectPath = Paths.get(session.getProjectPath());
+        if (!Files.exists(projectPath)) {
+            System.out.println("세션의 프로젝트 경로가 존재하지 않음: " + projectPath);
+            return;
+        }
+
+        // 분석 결과 복원
+        currentResult = session.getFlowResult();
+        currentProjectPath = projectPath;
+
+        // UI 업데이트
+        SwingUtilities.invokeLater(() -> {
+            // 요약 정보 업데이트
+            updateSummaryPanel(currentResult);
+            summaryPanel.setVisible(true);
+
+            // 엔드포인트 목록 업데이트
+            updateEndpointList(currentResult);
+
+            // 결과 표시 (저장된 스타일 또는 현재 선택된 스타일)
+            String style = session.getOutputStyle();
+            if (style == null || style.isEmpty()) {
+                style = getSelectedStyle();
+            }
+            resultPanel.displayResult(currentResult, style);
+
+            // 상태 업데이트
+            int endpointCount = currentResult.getFlows().size();
+            statusLabel.setText(String.format("이전 세션 복원됨: %d개 URL (%s)",
+                    endpointCount, session.getAnalyzedAt().toLocalDate()));
+
+            exportExcelButton.setEnabled(true);
+
+            System.out.println("세션 복원 완료: " + currentProjectPath);
+        });
     }
 
     /**

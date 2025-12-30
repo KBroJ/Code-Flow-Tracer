@@ -1172,3 +1172,155 @@ Week 4: 개선 + 회고     ██████░░░░░░░░░░░�
 - 빌드 실패 시 출력 경로를 변경하는 것도 유효한 우회 방법
 - GitHub 릴리즈 노트에서 `@` 기호는 멘션으로 해석됨 (주의 필요)
 - GitHub 릴리즈의 Source code (zip/tar.gz)는 자동 생성되며 삭제 불가
+
+---
+
+### 2025-12-30 (월) - Session 18
+
+#### Session 18: 세션 영속성 구현 (#15)
+
+**오늘 한 일**
+
+1. **GitHub 이슈 생성**
+   - #15: 세션 영속성 - 분석 결과 저장/복원
+   - #16: 작업 관리 탭 - 내장 칸반 보드
+   - 사용자 피드백 기반 Feature Request 형식으로 작성
+
+2. **v1.1 기능 계획 문서화**
+   - TODO.md에 v1.1 기능 계획 추가
+   - DESIGN.md에 세션 영속성 및 작업 관리 탭 설계 추가
+   - PR #17 생성 및 머지
+
+3. **세션 영속성 기능 구현**
+   - `SessionData.java`: 세션 데이터 클래스 생성
+   - `SessionManager.java`: 세션 저장/로드/삭제 기능 구현
+   - `MainFrame.java`: 세션 복원/저장 연동
+
+4. **기술 스택 결정**
+   - JSON 직렬화: **Gson** 선택
+   - 저장 위치: `~/.code-flow-tracer/session.json`
+
+**왜 Gson을 선택했는가?**
+
+JSON 직렬화 라이브러리 비교:
+
+| 라이브러리 | 장점 | 단점 |
+|-----------|------|------|
+| Gson | 가볍고 간단, 추가 의존성 없음, 직관적 API | 성능은 Jackson보다 낮음 |
+| Jackson | 고성능, 풍부한 기능 | 의존성 복잡, 설정 많음 |
+| org.json | JDK 표준 아님 | 객체 매핑 불편 |
+
+**Gson 선택 이유:**
+1. **단순성**: 한 줄로 객체 ↔ JSON 변환 (`gson.toJson()`, `gson.fromJson()`)
+2. **가벼움**: JAR 크기 약 250KB, 추가 의존성 없음
+3. **목적 적합**: 세션 데이터 저장은 성능보다 편의성이 중요
+4. **레거시 호환**: Java 8+에서 안정적으로 동작
+
+**왜 ~/.code-flow-tracer/ 경로를 선택했는가?**
+
+저장 위치 후보:
+
+| 위치 | 장점 | 단점 |
+|------|------|------|
+| 설치 폴더 | 앱과 함께 관리 | Program Files 쓰기 권한 없음 |
+| AppData | Windows 표준 | OS별 경로 다름 |
+| 홈 디렉토리 | 크로스 플랫폼, 명확함 | 숨김 폴더로 관리 필요 |
+
+**홈 디렉토리 선택 이유:**
+1. **크로스 플랫폼**: Windows/Mac/Linux 모두 `user.home` 사용 가능
+2. **권한 문제 없음**: 사용자 홈 디렉토리는 쓰기 권한 보장
+3. **명확한 위치**: `~/.code-flow-tracer/`로 앱 전용 폴더
+4. **기존 패턴**: 많은 CLI 도구가 이 방식 사용 (`.git`, `.npm`, `.gradle`)
+
+**구현 방식**
+
+```java
+// SessionManager.java
+public class SessionManager {
+    private static final Path SESSION_DIR = Paths.get(
+        System.getProperty("user.home"), ".code-flow-tracer");
+    private static final Path SESSION_FILE = SESSION_DIR.resolve("session.json");
+
+    // Gson + LocalDateTime 어댑터
+    private final Gson gson = new GsonBuilder()
+        .setPrettyPrinting()
+        .registerTypeAdapter(LocalDateTime.class, new LocalDateTimeAdapter())
+        .create();
+
+    public boolean saveSession(SessionData data) { ... }
+    public SessionData loadSession() { ... }
+    public boolean clearSession() { ... }
+}
+```
+
+**동작 흐름**
+```
+앱 시작
+  ↓
+restoreSession()
+  ↓
+세션 파일 존재? ──Yes→ JSON 역직렬화 → UI 복원 → "이전 세션 복원됨" 표시
+       │
+       No→ 빈 화면으로 시작
+
+분석 실행
+  ↓
+분석 완료
+  ↓
+saveSession() → JSON 직렬화 → session.json 저장
+```
+
+**LocalDateTime 직렬화 문제 해결**
+- 문제: Gson은 `LocalDateTime`을 기본 지원하지 않음
+- 해결: 커스텀 `TypeAdapter` 구현
+- 형식: ISO-8601 (`2025-12-30T14:30:00`)
+
+```java
+private static class LocalDateTimeAdapter extends TypeAdapter<LocalDateTime> {
+    private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
+
+    @Override
+    public void write(JsonWriter out, LocalDateTime value) throws IOException {
+        out.value(value != null ? FORMATTER.format(value) : null);
+    }
+
+    @Override
+    public LocalDateTime read(JsonReader in) throws IOException {
+        return LocalDateTime.parse(in.nextString(), FORMATTER);
+    }
+}
+```
+
+**배운 점**
+
+1. **Gson TypeAdapter 사용법**
+   - Java 8 Date/Time API는 별도 어댑터 필요
+   - `registerTypeAdapter()`로 커스텀 직렬화 등록
+
+2. **세션 복원 시 유효성 검증 중요**
+   - 프로젝트 경로가 삭제되었을 수 있음 → `Files.exists()` 체크
+   - JSON 파싱 실패 가능 → try-catch로 안전하게 처리
+
+3. **UI 스레드 안전성**
+   - 세션 복원 후 UI 업데이트는 `SwingUtilities.invokeLater()` 사용
+   - EDT(Event Dispatch Thread)에서만 UI 수정
+
+4. **설정 메뉴 확장**
+   - "세션 삭제" 옵션 추가로 사용자가 수동으로 초기화 가능
+   - 기존 "설정 초기화"와 분리 (설정 vs 분석 결과)
+
+**고민했던 점**
+
+1. **세션 저장 시점**
+   - 선택지: 앱 종료 시 vs 분석 완료 시
+   - 결정: **분석 완료 시** 저장
+   - 이유: 앱이 비정상 종료되어도 마지막 분석 결과 보존
+
+2. **여러 프로젝트 세션 관리**
+   - 선택지: 프로젝트별 세션 vs 단일 세션
+   - 결정: **단일 세션** (마지막 분석 결과만)
+   - 이유: MVP 범위, 복잡도 증가 방지, 실제 사용 패턴 고려
+
+**참고 자료**
+- Gson User Guide: https://github.com/google/gson/blob/main/UserGuide.md
+- Java Preferences API: https://docs.oracle.com/javase/8/docs/technotes/guides/preferences/
