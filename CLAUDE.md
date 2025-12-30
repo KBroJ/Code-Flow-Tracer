@@ -17,6 +17,7 @@
 | 파싱 | JavaParser | 3.25.5 |
 | XML | JDOM2 | 2.0.6.1 |
 | Excel | Apache POI | 5.2.5 |
+| JSON | Gson | 2.10.1 |
 | CLI | Picocli | 4.7.5 |
 | GUI | Swing | JDK 내장 |
 | Test | JUnit 5 | 5.10.1 |
@@ -30,6 +31,7 @@ com.codeflow/
 ├── parser/             # 소스 코드 파싱 (JavaParser)
 ├── analyzer/           # 호출 흐름 분석
 ├── output/             # 출력 (Console, Excel)
+├── session/            # 세션 영속성 (Gson)
 └── ui/                 # Swing GUI
 ```
 

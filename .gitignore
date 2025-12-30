@@ -24,6 +24,7 @@ Thumbs.db
 # Build outputs
 out/
 target/
+bin/
 
 # Test outputs
 test-output/

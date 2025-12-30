@@ -1262,6 +1262,320 @@ jpackage를 직접 호출하면서 출력 경로를 변경:
 
 ---
 
+### Issue #020: 설정 이중 저장 (Registry + JSON)
+
+**발생일**: 2025-12-31
+**해결일**: 2025-12-31
+**상태**: 🟢 해결됨
+
+#### 문제 상황
+설정이 두 곳에 중복 저장되고 있음:
+
+| 저장소 | 저장 항목 | 도입 시점 |
+|--------|----------|----------|
+| Registry (Preferences API) | 최근 경로, URL 필터, 출력 스타일 | Session 13 |
+| JSON 파일 | 분석 결과, URL 필터, 출력 스타일 | Session 18 |
+
+- URL 필터, 출력 스타일이 **두 곳에 중복 저장**
+- 두 저장소 간 동기화 문제 가능성
+
+#### 원인 분석
+
+**Session 13 (2025-12-24)**: GUI 설정 저장 기능 구현
+- 저장 대상: 최근 경로, URL 필터, 출력 스타일 (단순 문자열)
+- 선택: Java Preferences API (표준 API, 추가 의존성 없음)
+- 당시 합리적 선택이었음
+
+**Session 18 (2025-12-30)**: 세션 영속성 구현
+- 저장 대상: FlowResult (복잡한 객체 트리 구조)
+- 선택: Gson JSON 파일 (객체 직렬화 필수)
+- **문제**: URL 필터, 출력 스타일도 SessionData에 포함하여 저장
+- 기존 Preferences 저장 로직을 제거하지 않음 → 이중 저장 발생
+
+**왜 당시 발견하지 못했나?**
+- 세션 영속성 구현에 집중
+- 기존 설정 저장 로직과의 연관성 검토 부족
+- 동작에는 문제 없음 (둘 다 로드되어 마지막 값 사용)
+
+#### 저장 방식 비교
+
+| 항목 | Registry (Preferences) | JSON 파일 |
+|------|----------------------|-----------|
+| 플랫폼 | Windows: Registry, 기타: 파일 | 모든 OS 동일 |
+| 복잡한 객체 | ❌ 문자열/숫자만 | ✅ 객체 직렬화 가능 |
+| 백업/이동 | ❌ regedit 필요 | ✅ 파일 복사 |
+| 디버깅 | ❌ 레지스트리 편집기 | ✅ 텍스트 에디터 |
+| 삭제 시 정리 | WiX RemoveRegistryKey | WiX RemoveFile |
+| 표준 API | ✅ Java 표준 | ❌ Gson 의존 |
+
+#### 해결 방향
+
+**권장: JSON 단일 저장으로 통합 (v1.2)**
+
+```json
+// ~/.code-flow-tracer/session.json
+{
+  "projectPath": "/path/to/project",
+  "recentPaths": ["/path1", "/path2"],  // Registry에서 이동
+  "urlFilter": "/api/*",
+  "outputStyle": "normal",
+  "analyzedAt": "2025-12-31T14:30:00",
+  "flowResult": { ... }
+}
+```
+
+**통합 시 장점**:
+- 설정 관리 일원화
+- 크로스 플랫폼 완전 지원
+- 디버깅/백업 용이
+- 설치 삭제 시 정리 간단
+- **GUI 메뉴 단순화** (삭제 메뉴 통합)
+
+**GUI 메뉴 현재 상태**:
+현재 설정 메뉴에 삭제 버튼이 2개로 분리되어 있음:
+- "설정 초기화" → Registry만 삭제 (`prefs.clear()`)
+- "세션 삭제" → JSON 파일만 삭제 (`sessionManager.clearSession()`)
+
+**GUI 메뉴 통합 계획** (v1.2):
+JSON 단일 저장으로 통합 시, 삭제 메뉴도 하나로 통합:
+- 기존: "설정 초기화" + "세션 삭제" (2개)
+- 변경: "설정/세션 초기화" (1개) → JSON 파일 삭제
+
+**마이그레이션 전략**:
+1. 앱 시작 시 Registry 설정 존재 여부 확인
+2. 있으면 JSON으로 마이그레이션 후 Registry 삭제
+3. 없으면 JSON에서만 로드
+4. WiX Registry 정리 로직은 1~2 버전간 유지 (이전 버전 사용자 대응)
+5. GUI 삭제 메뉴 통합 (2개 → 1개)
+
+#### 최종 해결 (2025-12-31)
+
+**JSON 단일 저장으로 통합 완료**:
+
+1. **SessionData.java**: `recentPaths` 필드 추가
+2. **SessionManager.java**: `loadSettings()`, `saveSettings()` 메서드 추가
+3. **MainFrame.java**:
+   - `Preferences` API 완전 제거
+   - 모든 설정을 `SessionManager`로 저장/로드
+   - 삭제 메뉴 통합: "설정 초기화" + "세션 삭제" → "설정/세션 초기화"
+
+**결과**:
+- 설정 저장 위치: `~/.code-flow-tracer/session.json` (단일)
+- Registry 의존성 제거 (크로스 플랫폼 완전 지원)
+- GUI 메뉴 단순화 (삭제 버튼 1개)
+
+#### 배운 점
+
+1. **기능 추가 시 기존 구현과의 연관성 검토 필수**
+   - 새 저장 방식 도입 시 기존 저장 로직 확인
+   - 중복/충돌 가능성 사전 검토
+
+2. **저장 방식 결정 시 향후 확장 고려**
+   - 단순 값만 저장할 것 같아도 나중에 복잡한 객체가 추가될 수 있음
+   - 처음부터 JSON/파일 방식이 확장성이 좋음
+
+3. **기술 부채는 조기에 문서화**
+   - 발견 즉시 기록하여 망각 방지
+   - 리팩토링 계획 수립 용이
+
+---
+
+### Issue #021: GUI UX 일관성 문제
+
+**발생일**: 2025-12-31
+**상태**: 🟢 해결됨
+
+#### 문제 상황
+
+테스트 중 발견된 3가지 UX 문제:
+
+**1. 분석 결과 영역 커서 여전히 표시됨**
+- 증상: 초기 상태(분석 전)에서 결과 영역 클릭 시 커서(|) 표시
+- 이전: 흰색 커서
+- 현재: 검은색 커서 (배경색 수정 후)
+- 원인: 초기 상태는 HTML 콘텐츠가 없어서 기본 배경색(흰색/밝은색) 사용
+
+**2. 왼쪽 필터(엔드포인트 검색) 저장 타이밍 문제**
+- 증상: 왼쪽 필터 입력 후 "분석 실행"을 눌러야만 저장됨
+- 문제점:
+  - 사용자가 필터만 입력하고 앱 종료 시 저장 안 됨
+  - 오른쪽 URL 필터와 동작 방식 불일치
+- 고민:
+  - 왼쪽 필터는 "결과 내 검색"용 (실시간 필터링)
+  - 오른쪽 URL 필터는 "분석 대상 필터"용 (분석 시 적용)
+  - 성격이 다르므로 저장하지 않는 것도 방법
+
+**3. 설정/세션 초기화 시 불완전한 초기화**
+- 증상: 초기화 클릭 시
+  - ✅ 프로젝트 경로: 삭제됨
+  - ✅ URL 필터: 삭제됨
+  - ❌ 분석 결과: 화면에 그대로 남음
+- 문제점: 일관성 없음 - 완전 초기화 기대하지만 화면은 그대로
+
+#### 조사 및 해결 방안
+
+**1. 커서(|) 문제 - 조사 결과**
+
+조사한 방법들:
+
+| 방법 | 설명 | 장점 | 단점 |
+|------|------|------|------|
+| `setCaret(null)` | 커서 객체 제거 | 가장 간단 | 텍스트 선택 불가 |
+| `setFocusable(false)` | 포커스 비활성화 | 간단 | Ctrl+휠 줌 기능 동작 안 함 |
+| `setCaretColor(배경색)` | 커서 색상을 배경과 동일하게 | 간단 | 초기 상태에서 배경색 다르면 보임 |
+| 초기 HTML 설정 | 빈 상태에도 다크 배경 HTML | 간단 | 근본 해결 아님 |
+| **Custom Caret** | `DefaultCaret` 상속하여 `paint()` 오버라이드 | **완벽한 해결** | 클래스 추가 필요 |
+
+**선택: Custom Caret (InvisibleCaret)**
+
+[Oracle 공식 문서](https://docs.oracle.com/en/java/javase/21/docs/api/java.desktop/javax/swing/text/DefaultCaret.html) 참고:
+- Swing에서 **Caret**은 커서(|) 그리기 담당
+- **Highlighter**는 선택 영역 표시 담당 (별도 컴포넌트)
+- → Caret의 `paint()` 메서드만 비우면 **커서는 숨기고 텍스트 선택은 유지** 가능
+
+```java
+public class InvisibleCaret extends DefaultCaret {
+    @Override
+    public void paint(Graphics g) {
+        // 아무것도 그리지 않음 - 커서 완전히 숨김
+    }
+
+    @Override
+    protected synchronized void damage(Rectangle r) {
+        // 그리지 않으므로 damage도 무시
+    }
+}
+```
+
+장점:
+- ✅ 커서 완전히 숨김 (초기 상태, 클릭 후 모두)
+- ✅ 텍스트 드래그 선택 가능
+- ✅ Ctrl+휠 줌 기능 유지
+- ✅ 배경색과 무관하게 동작
+
+---
+
+**2. 왼쪽 필터 저장 문제 - 결정**
+
+| 필터 | 용도 | 성격 | 저장 여부 |
+|------|------|------|----------|
+| 오른쪽 URL 필터 | 분석 대상 선택 | **설정** | ✅ 저장 |
+| 왼쪽 검색 필터 | 결과 내 검색 | **UI 상태** | ❌ 저장 안 함 |
+
+**선택: 저장하지 않음**
+- 왼쪽 필터는 Ctrl+F 같은 "찾기" 기능과 동일한 성격
+- 앱 재시작 시 검색어가 남아있으면 오히려 혼란
+- 결론: `endpointFilter` 관련 저장/복원 코드 제거
+
+---
+
+**3. 초기화 불완전 문제 - 결정**
+
+**선택: 화면도 함께 초기화**
+- `handleClearAll()`에서 `resultPanel.clear()` 호출 추가
+- 사용자 기대: "초기화" = 완전히 처음 상태로 돌아감
+- 일관성 있는 UX 제공
+
+---
+
+**4. 처음 실행과 초기화 후 화면 불일치 (추가 발견)**
+
+테스트 중 발견한 추가 문제:
+- **처음 실행**: 왼쪽 패널 숨김, 분석 요약 숨김 (2단 구조)
+- **초기화 후**: 왼쪽 패널 보임, 분석 요약 보임 (3단 구조)
+- 사용자 관점: 레이아웃이 달라서 혼란
+
+**선택: 처음부터 3단 구조로 통일**
+- 사용자 선호: 3단 구조가 더 직관적
+- 데이터만 비어있고 레이아웃은 동일하게
+
+---
+
+#### 최종 해결
+
+**1. InvisibleCaret 클래스 추가** (`ResultPanel.java`)
+
+```java
+/**
+ * 투명 커서 (Caret)
+ * 커서(|)를 완전히 숨기면서 텍스트 선택 기능은 유지합니다.
+ */
+private static class InvisibleCaret extends DefaultCaret {
+    @Override
+    public void paint(Graphics g) {
+        // 아무것도 그리지 않음 - 커서 완전히 숨김
+    }
+
+    @Override
+    protected synchronized void damage(Rectangle r) {
+        // 그리지 않으므로 damage도 무시
+    }
+}
+
+// 사용
+resultPane.setCaret(new InvisibleCaret());
+```
+
+**2. 왼쪽 필터 저장 제거** (`MainFrame.java`)
+
+```java
+// saveSettings()에서 endpointFilter를 null로 전달
+sessionManager.saveSettings(paths, urlFilter, outputStyle, null);
+
+// loadSettings()에서 endpointFilter 복원 코드 제거
+```
+
+**3. 완전한 초기화** (`MainFrame.java:handleClearAll()`)
+
+```java
+if (sessionManager.clearSession()) {
+    projectPathComboBox.removeAllItems();
+    urlFilterField.setText("");
+    endpointSearchField.setText("");       // 왼쪽 검색 필터
+    rbNormal.setSelected(true);
+    endpointListModel.clear();             // 왼쪽 엔드포인트 목록
+    resultPanel.clear();                   // 분석 결과 화면
+    currentResult = null;                  // 분석 결과 객체
+    // 분석 요약도 초기화
+    lblTotalClasses.setText("0개");
+    lblControllerCount.setText("0개");
+    lblServiceCount.setText("0개");
+    lblDaoCount.setText("0개");
+    lblEndpointCount.setText("0개");
+    statusLabel.setText("설정 및 세션이 초기화되었습니다.");
+}
+```
+
+**4. 초기 레이아웃 통일** (`MainFrame.java`)
+
+```java
+// 처음부터 왼쪽 패널 표시
+mainSplitPane.setDividerLocation(ENDPOINT_PANEL_WIDTH);
+
+// 처음부터 분석 요약 표시 (초기값 0개)
+summaryPanel.setVisible(true);
+```
+
+#### 결과
+
+| 항목 | 이전 | 이후 |
+|------|------|------|
+| 커서 표시 | 검은색 커서 보임 | 완전히 숨김 |
+| 텍스트 선택 | 가능 | 가능 (유지) |
+| 왼쪽 필터 저장 | 분석 시에만 저장 | 저장 안 함 |
+| 초기화 범위 | 입력 필드만 | 전체 화면 |
+| 초기 레이아웃 | 2단 구조 | 3단 구조 |
+| 초기화 후 레이아웃 | 3단 구조 | 3단 구조 (동일) |
+
+#### 배운 점
+
+1. **Swing Caret vs Highlighter**: 커서와 텍스트 선택은 별도 컴포넌트
+2. **UI 상태 vs 설정**: 일시적 검색 상태는 저장하지 않는 것이 자연스러움
+3. **레이아웃 일관성**: 사용자는 같은 앱에서 레이아웃 변화를 혼란스러워함
+4. **완전한 초기화**: 사용자 기대에 맞게 모든 상태를 리셋해야 함
+
+---
+
 ## 자주 발생하는 문제
 
 ### Gradle 빌드 관련

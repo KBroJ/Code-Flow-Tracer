@@ -70,6 +70,7 @@ java -jar code-flow-tracer.jar -p /path/to/project -s detailed
 | 기능 | 설명 |
 |------|------|
 | **프로젝트 선택** | 폴더 브라우저로 분석할 프로젝트 선택 |
+| **세션 복원** | 앱 재시작 시 마지막 분석 결과 자동 복원 |
 | **최근 경로 기억** | 최근 사용한 프로젝트 경로 10개 저장 |
 | **URL 필터** | 특정 URL 패턴만 분석 (예: `/api/user/*`) |
 | **출력 스타일** | Compact, Normal, Detailed 선택 |
@@ -98,6 +99,7 @@ java -jar code-flow-tracer.jar -p /path/to/project -s detailed
 | **콘솔 출력** | 트리 형태 + ANSI 색상 지원 | ✅ 완료 |
 | **엑셀 출력** | 호출 흐름 + SQL 목록 시트 | ✅ 완료 |
 | **Desktop GUI** | Swing 기반, FlatLaf 다크 테마 | ✅ 완료 |
+| **세션 영속성** | 앱 재시작 시 마지막 분석 결과 복원 | ✅ 완료 |
 | **Windows 설치 파일** | JRE 번들 포함, Java 설치 불필요 | ✅ 완료 |
 | **전자정부프레임워크** | 레거시 SI 환경 특화 지원 | ✅ 지원 |
 
@@ -174,6 +176,7 @@ javaw -jar build/libs/code-flow-tracer.jar --gui
 | 파싱 | JavaParser | Java 소스 AST 분석 |
 | XML | JDOM2 | iBatis/MyBatis XML 파싱 |
 | Excel | Apache POI | 엑셀 출력 |
+| JSON | Gson | 세션 영속성 (JSON 직렬화) |
 | CLI | Picocli | 명령줄 인터페이스 |
 | GUI | Swing + FlatLaf | Desktop GUI (다크 테마) |
 
@@ -208,6 +211,7 @@ code-flow-tracer/
 │   │   ├── parser/          # 소스 코드 파싱 ✅
 │   │   ├── analyzer/        # 흐름 분석 ✅
 │   │   ├── output/          # 출력 (콘솔 ✅, 엑셀 ✅)
+│   │   ├── session/         # 세션 영속성 ✅
 │   │   └── ui/              # Swing GUI ✅
 │   └── test/java/
 └── samples/                  # 테스트용 샘플 코드

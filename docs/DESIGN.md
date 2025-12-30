@@ -93,6 +93,10 @@ com.codeflow/
 │   ├── ConsoleOutput.java    # 콘솔 출력
 │   └── ExcelOutput.java      # 엑셀 출력 (Apache POI)
 │
+├── session/                  # 세션 영속성 (v1.1)
+│   ├── SessionManager.java   # 세션 저장/로드/삭제
+│   └── SessionData.java      # 세션 데이터 (JSON 직렬화)
+│
 └── ui/                       # GUI
     ├── MainFrame.java        # 메인 윈도우
     └── ResultPanel.java      # 결과 표시 패널
@@ -347,7 +351,7 @@ code-flow-result.xlsx (이미 존재)
 - [x] Swing GUI (FlatLaf 다크 테마)
 
 ### Phase 2 (v1.1 - 기능 확장)
-- [ ] 세션 영속성 (분석 결과 저장/복원) - [#15](https://github.com/KBroJ/Code-Flow-Tracer/issues/15)
+- [x] 세션 영속성 (분석 결과 저장/복원) - [#15](https://github.com/KBroJ/Code-Flow-Tracer/issues/15) ✅
 - [ ] 작업 관리 탭 (Jira 스타일 칸반 보드) - [#16](https://github.com/KBroJ/Code-Flow-Tracer/issues/16)
 
 ### Phase 3 (향후)
@@ -544,9 +548,72 @@ UserService       UserServiceImpl, UserServiceV2, UserServiceV3
 
 ## 9. 설정 저장 및 배포
 
-### 9.1 사용자 설정 저장
+### 9.1 설정 저장 방식
 
-**저장 방식**: Java Preferences API
+#### 현재 상태 (v1.1+)
+
+> ✅ **해결 완료**: JSON 단일 저장으로 통합됨 (2025-12-31)
+
+| 저장소 | 저장 항목 |
+|--------|----------|
+| JSON 파일 (`~/.code-flow-tracer/session.json`) | 최근 경로, URL 필터, 출력 스타일, 분석 결과 |
+
+- Registry (Preferences API) 사용 제거
+- 모든 설정이 JSON 파일 하나로 통합됨
+- GUI 삭제 메뉴도 1개로 통합: "설정/세션 초기화"
+
+#### 저장 방식 비교
+
+| 항목 | Registry (Preferences API) | JSON 파일 |
+|------|---------------------------|-----------|
+| 플랫폼 | Windows에서는 Registry, 기타 OS는 파일 | 모든 OS에서 동일 |
+| 저장 위치 | `HKCU\Software\JavaSoft\Prefs\...` | `~/.code-flow-tracer/session.json` |
+| 복잡한 객체 | ❌ 문자열/숫자만 | ✅ 객체 직렬화 가능 |
+| 백업/이동 | ❌ regedit 내보내기 필요 | ✅ 파일 복사로 가능 |
+| 디버깅 | ❌ 레지스트리 편집기 필요 | ✅ 텍스트 에디터로 확인 |
+| 삭제 시 정리 | WiX RemoveRegistryKey 필요 | WiX RemoveFile로 간단 |
+| 표준 API | ✅ Java 표준 | ❌ Gson 의존 |
+
+#### 구현된 해결 방향 (2025-12-31 완료)
+
+**JSON 단일 저장으로 통합 완료**:
+
+```json
+// ~/.code-flow-tracer/session.json
+{
+  "projectPath": "/path/to/project",
+  "recentPaths": ["/path1", "/path2"],  // Registry에서 이동
+  "urlFilter": "/api/*",
+  "outputStyle": "normal",
+  "analyzedAt": "2025-12-31T14:30:00",
+  "flowResult": { ... }
+}
+```
+
+**통합 시 장점**:
+- 설정 관리 일원화
+- 크로스 플랫폼 완전 지원
+- 디버깅/백업 용이
+- 설치 삭제 시 정리 간단
+- GUI 메뉴 단순화 (삭제 메뉴 통합)
+
+**GUI 메뉴 (통합 완료)**:
+```
+설정 버튼 클릭 → 팝업 메뉴:
+└── "설정/세션 초기화" → JSON 파일 삭제 (sessionManager.clearSession())
+```
+
+- 기존 2개 메뉴를 1개로 통합
+- 모든 설정과 분석 결과가 함께 삭제됨
+
+**마이그레이션 전략**:
+1. 앱 시작 시 Registry에서 설정 읽기 시도
+2. 있으면 JSON으로 마이그레이션 후 Registry 삭제
+3. 없으면 JSON에서만 로드
+4. WiX의 Registry 정리 로직은 1~2 버전간 유지 (이전 버전 사용자 대응)
+5. GUI 삭제 메뉴 통합 (2개 → 1개)
+
+#### 현재 Registry 저장 구현 (Session 13)
 
 ```java
 // MainFrame.java
@@ -573,10 +640,16 @@ String pathsStr = prefs.get("recentPaths", "");
 - `urlFilter`: URL 필터 패턴
 - `outputStyle`: 출력 스타일 (compact/normal/detailed)
 
-**설계 결정 이유**:
+**설계 결정 이유 (당시)**:
 - Java 표준 API로 크로스 플랫폼 지원
 - 별도 설정 파일 관리 불필요
 - 설치 폴더(Program Files)에는 쓰기 권한이 없어 외부 저장 필요
+
+**왜 JSON으로 통합해야 하는가**:
+- Session 18에서 FlowResult 저장을 위해 JSON 도입
+- 복잡한 객체 저장에는 JSON이 필수
+- 두 저장소 관리는 복잡도 증가
+- 상세 분석은 [ISSUES.md #020](ISSUES.md) 참조
 
 ### 9.2 설치 파일 (jpackage)
 
@@ -619,7 +692,7 @@ Remove-Item -Path "HKCU:\Software\JavaSoft\Prefs\com\codeflow" -Recurse
 
 ---
 
-## 10. 세션 영속성 (v1.1) - [#15](https://github.com/KBroJ/Code-Flow-Tracer/issues/15)
+## 10. 세션 영속성 (v1.1) ✅ - [#15](https://github.com/KBroJ/Code-Flow-Tracer/issues/15)
 
 ### 10.1 개요
 
