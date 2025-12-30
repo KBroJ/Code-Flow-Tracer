@@ -17,9 +17,10 @@ public class SessionData {
     private String projectPath;           // 분석한 프로젝트 경로
     private LocalDateTime analyzedAt;     // 분석 시간
     private FlowResult flowResult;        // 분석 결과
-    private String urlFilter;             // URL 필터
+    private String urlFilter;             // URL 필터 (오른쪽 패널)
     private String outputStyle;           // 출력 스타일 (compact, normal, detailed)
     private List<String> recentPaths;     // 최근 프로젝트 경로 목록
+    private String endpointFilter;        // 엔드포인트 검색 필터 (왼쪽 패널)
 
     public SessionData() {
     }
@@ -77,6 +78,14 @@ public class SessionData {
 
     public void setRecentPaths(List<String> recentPaths) {
         this.recentPaths = recentPaths;
+    }
+
+    public String getEndpointFilter() {
+        return endpointFilter;
+    }
+
+    public void setEndpointFilter(String endpointFilter) {
+        this.endpointFilter = endpointFilter;
     }
 
     /**

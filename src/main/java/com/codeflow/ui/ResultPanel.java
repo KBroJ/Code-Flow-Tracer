@@ -62,7 +62,12 @@ public class ResultPanel extends JPanel {
         resultPane.setEditable(false);
         resultPane.putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, Boolean.TRUE);
         resultPane.setFont(new Font("Malgun Gothic", Font.PLAIN, fontSize));
-        resultPane.getCaret().setVisible(false);  // 커서(|) 숨기기
+
+        // 커서(|) 완전히 숨기기 - 배경색과 동일하게 설정
+        resultPane.setCaretColor(new Color(0x1E, 0x1E, 0x1E));  // 배경색과 동일
+        resultPane.getCaret().setVisible(false);
+        resultPane.getCaret().setBlinkRate(0);  // 깜빡임 비활성화
+
         resultPane.setFocusable(true);  // Ctrl+휠 이벤트 수신을 위해 활성화
 
         scrollPane = new JScrollPane(resultPane);

@@ -888,9 +888,13 @@ public class MainFrame extends JFrame {
             }
         }
 
-        // URL 필터
+        // URL 필터 (오른쪽)
         String urlFilter = settings.getUrlFilter();
         urlFilterField.setText(urlFilter != null ? urlFilter : "");
+
+        // 엔드포인트 검색 필터 (왼쪽)
+        String endpointFilter = settings.getEndpointFilter();
+        endpointSearchField.setText(endpointFilter != null ? endpointFilter : "");
 
         // 출력 스타일
         String style = settings.getOutputStyle();
@@ -928,7 +932,7 @@ public class MainFrame extends JFrame {
         projectPathComboBox.setSelectedItem(newPath);
 
         // JSON에 저장
-        sessionManager.saveSettings(paths, urlFilterField.getText().trim(), getSelectedStyle());
+        sessionManager.saveSettings(paths, urlFilterField.getText().trim(), getSelectedStyle(), endpointSearchField.getText().trim());
     }
 
     /**
@@ -941,7 +945,7 @@ public class MainFrame extends JFrame {
             paths.add(projectPathComboBox.getItemAt(i));
         }
 
-        sessionManager.saveSettings(paths, urlFilterField.getText().trim(), getSelectedStyle());
+        sessionManager.saveSettings(paths, urlFilterField.getText().trim(), getSelectedStyle(), endpointSearchField.getText().trim());
     }
 
     // ===== 세션 저장/복원 =====
