@@ -595,12 +595,25 @@ UserService       UserServiceImpl, UserServiceV2, UserServiceV3
 - 크로스 플랫폼 완전 지원
 - 디버깅/백업 용이
 - 설치 삭제 시 정리 간단
+- GUI 메뉴 단순화 (삭제 메뉴 통합)
+
+**GUI 메뉴 현재 상태**:
+```
+설정 버튼 클릭 → 팝업 메뉴:
+├── "설정 초기화" → Registry만 삭제 (prefs.clear())
+└── "세션 삭제" → JSON 파일만 삭제 (sessionManager.clearSession())
+```
+
+**GUI 메뉴 통합 계획** (v1.2):
+- 현재: "설정 초기화" + "세션 삭제" (2개)
+- 변경: "설정/세션 초기화" (1개) → JSON 파일 삭제
 
 **마이그레이션 전략**:
 1. 앱 시작 시 Registry에서 설정 읽기 시도
 2. 있으면 JSON으로 마이그레이션 후 Registry 삭제
 3. 없으면 JSON에서만 로드
 4. WiX의 Registry 정리 로직은 1~2 버전간 유지 (이전 버전 사용자 대응)
+5. GUI 삭제 메뉴 통합 (2개 → 1개)
 
 #### 현재 Registry 저장 구현 (Session 13)
 

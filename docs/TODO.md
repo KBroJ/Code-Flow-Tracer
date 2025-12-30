@@ -211,6 +211,7 @@
 - [ ] MainFrame.java Preferences 사용 제거
 - [ ] SessionData에 recentPaths 필드 추가
 - [ ] 기존 사용자 설정 마이그레이션 테스트
+- [ ] GUI 삭제 메뉴 통합 ("설정 초기화" + "세션 삭제" → 단일 메뉴)
 
 **분기 분석**
 - [ ] if/switch 문 조건 추출
