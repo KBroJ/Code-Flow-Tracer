@@ -6,6 +6,7 @@ import com.codeflow.parser.ClassType;
 import com.codeflow.parser.SqlInfo;
 
 import javax.swing.*;
+import javax.swing.text.DefaultCaret;
 import java.awt.*;
 import java.awt.event.MouseWheelEvent;
 import java.awt.event.MouseWheelListener;
@@ -63,10 +64,8 @@ public class ResultPanel extends JPanel {
         resultPane.putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, Boolean.TRUE);
         resultPane.setFont(new Font("Malgun Gothic", Font.PLAIN, fontSize));
 
-        // 커서(|) 완전히 숨기기 - 배경색과 동일하게 설정
-        resultPane.setCaretColor(new Color(0x1E, 0x1E, 0x1E));  // 배경색과 동일
-        resultPane.getCaret().setVisible(false);
-        resultPane.getCaret().setBlinkRate(0);  // 깜빡임 비활성화
+        // 커서(|) 완전히 숨기기 - InvisibleCaret 사용
+        resultPane.setCaret(new InvisibleCaret());
 
         resultPane.setFocusable(true);  // Ctrl+휠 이벤트 수신을 위해 활성화
 
@@ -485,6 +484,26 @@ public class ResultPanel extends JPanel {
             return doc.getText(0, doc.getLength());
         } catch (Exception e) {
             return "";
+        }
+    }
+
+    /**
+     * 투명 커서 (Caret)
+     *
+     * 커서(|)를 완전히 숨기면서 텍스트 선택 기능은 유지합니다.
+     * - paint(): 아무것도 그리지 않음 → 커서 숨김
+     * - damage(): repaint 영역 계산 무시 → 성능 최적화
+     * - Highlighter가 선택 영역을 별도로 처리하므로 드래그 선택은 정상 동작
+     */
+    private static class InvisibleCaret extends DefaultCaret {
+        @Override
+        public void paint(Graphics g) {
+            // 아무것도 그리지 않음 - 커서 완전히 숨김
+        }
+
+        @Override
+        protected synchronized void damage(Rectangle r) {
+            // 그리지 않으므로 damage도 무시
         }
     }
 }

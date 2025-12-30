@@ -223,7 +223,7 @@ public class MainFrame extends JFrame {
 
         // JSplitPane: 좌측 URL 목록 + 결과 패널 (드래그 조절 가능)
         mainSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, endpointListPanel, mainPanel);
-        mainSplitPane.setDividerLocation(0);  // 분석 전에는 숨김
+        mainSplitPane.setDividerLocation(ENDPOINT_PANEL_WIDTH);  // 처음부터 왼쪽 패널 표시
         mainSplitPane.setDividerSize(6);
         mainSplitPane.setContinuousLayout(true);
         mainSplitPane.setBorder(null);
@@ -304,7 +304,7 @@ public class MainFrame extends JFrame {
 
         // 1. 분석 요약 섹션
         summaryPanel = createSummarySection();
-        summaryPanel.setVisible(false);  // 분석 전에는 숨김
+        summaryPanel.setVisible(true);  // 처음부터 표시 (초기값 0개)
         panel.add(summaryPanel);
 
         // 2. 프로젝트 경로 섹션
@@ -635,7 +635,17 @@ public class MainFrame extends JFrame {
             if (sessionManager.clearSession()) {
                 projectPathComboBox.removeAllItems();
                 urlFilterField.setText("");
+                endpointSearchField.setText("");
                 rbNormal.setSelected(true);
+                endpointListModel.clear();  // 왼쪽 엔드포인트 목록 초기화
+                resultPanel.clear();  // 분석 결과 화면도 초기화
+                currentResult = null;  // 분석 결과 객체도 초기화
+                // 분석 요약도 초기화
+                lblTotalClasses.setText("0개");
+                lblControllerCount.setText("0개");
+                lblServiceCount.setText("0개");
+                lblDaoCount.setText("0개");
+                lblEndpointCount.setText("0개");
                 statusLabel.setText("설정 및 세션이 초기화되었습니다.");
             } else {
                 showError("초기화 실패");
@@ -892,9 +902,7 @@ public class MainFrame extends JFrame {
         String urlFilter = settings.getUrlFilter();
         urlFilterField.setText(urlFilter != null ? urlFilter : "");
 
-        // 엔드포인트 검색 필터 (왼쪽)
-        String endpointFilter = settings.getEndpointFilter();
-        endpointSearchField.setText(endpointFilter != null ? endpointFilter : "");
+        // 왼쪽 엔드포인트 검색 필터는 저장하지 않음 (일시적 UI 상태)
 
         // 출력 스타일
         String style = settings.getOutputStyle();
@@ -931,8 +939,8 @@ public class MainFrame extends JFrame {
         }
         projectPathComboBox.setSelectedItem(newPath);
 
-        // JSON에 저장
-        sessionManager.saveSettings(paths, urlFilterField.getText().trim(), getSelectedStyle(), endpointSearchField.getText().trim());
+        // JSON에 저장 (왼쪽 필터는 저장하지 않음)
+        sessionManager.saveSettings(paths, urlFilterField.getText().trim(), getSelectedStyle(), null);
     }
 
     /**
@@ -945,7 +953,8 @@ public class MainFrame extends JFrame {
             paths.add(projectPathComboBox.getItemAt(i));
         }
 
-        sessionManager.saveSettings(paths, urlFilterField.getText().trim(), getSelectedStyle(), endpointSearchField.getText().trim());
+        // 왼쪽 엔드포인트 검색 필터는 저장하지 않음 (일시적 UI 상태)
+        sessionManager.saveSettings(paths, urlFilterField.getText().trim(), getSelectedStyle(), null);
     }
 
     // ===== 세션 저장/복원 =====
