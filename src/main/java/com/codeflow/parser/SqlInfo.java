@@ -249,13 +249,6 @@ public class SqlInfo {
     }
 
     /**
-     * SQL 파라미터가 있는지 확인
-     */
-    public boolean hasSqlParameters() {
-        return sqlParameters != null && !sqlParameters.isEmpty();
-    }
-
-    /**
      * SQL 파라미터 목록을 문자열로 반환
      */
     public String getSqlParametersAsString() {

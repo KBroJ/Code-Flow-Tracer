@@ -263,6 +263,9 @@
 - [ ] (선택) EXPLAIN 결과 분석 - DB 연결 필요
 
 ### 품질 개선
+- [ ] 중복 코드 리팩토링 (Issue #022 참고)
+  - [ ] `ResultPanel` ↔ `ConsoleOutput` 공통 메서드 분리
+  - [ ] `center()`, `getDisplayWidth()` → `DisplayUtils` 유틸 클래스로 이동
 - [ ] 로깅 개선 (Logback 설정)
 - [ ] 예외 처리 강화
 - [ ] 테스트 커버리지 80% 이상

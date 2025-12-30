@@ -1576,6 +1576,101 @@ summaryPanel.setVisible(true);
 
 ---
 
+### Issue #022: 미사용 코드 정리 (Dead Code Cleanup)
+
+**발생일**: 2025-12-31
+**상태**: 🟢 해결됨
+
+#### 문제 상황
+
+PR 머지 전 전체 소스 검토 중 발견된 미사용 코드:
+
+**검토 방법**: 4개 에이전트 병렬 실행으로 전체 19개 소스 파일 분석
+- parser 패키지 검토
+- analyzer 패키지 검토
+- output/session/ui 패키지 검토
+- TDD 커버리지 분석
+
+**발견된 문제**:
+
+| 파일 | 미사용 코드 | 유형 |
+|------|------------|------|
+| MainFrame.java | `createColoredLabel()` | 미사용 private 메서드 |
+| FlowNode.java | `addCallArgument()`, `getCallArgumentsAsString()` | 미사용 public 메서드 |
+| FlowResult.java | `findFlowsByUrl()`, `findFlowsByClass()`, `containsClass()` | 미사용 public/private 메서드 |
+| MethodCall.java | `getArgumentsAsString()` | 미사용 public 메서드 |
+| ClassType.java | `description` 필드, `getDescription()` | 미사용 필드/메서드 |
+
+#### 해결 과정
+
+**1차 시도: 모든 미사용 코드 제거**
+
+아래 메서드들도 함께 제거 시도:
+- `ParameterInfo.isSpringInjected()`
+- `SqlInfo.getSqlParametersAsString()`
+
+**빌드 실패**:
+```
+ConsoleOutput.java:212: error: cannot find symbol
+    .filter(p -> !p.isSpringInjected())
+
+ExcelOutput.java:423: error: cannot find symbol
+    String sqlParams = sqlInfo.getSqlParametersAsString();
+```
+
+**교훈**: grep 검색으로 "정의"만 찾으면 실제 사용처를 놓칠 수 있음.
+람다/스트림 내부 호출은 별도 확인 필요.
+
+**2차 시도: 실제 사용 확인 후 선별 제거**
+
+사용 중인 메서드 복구:
+- `ParameterInfo.isSpringInjected()` - ConsoleOutput에서 파라미터 필터링에 사용
+- `SqlInfo.getSqlParametersAsString()` - ExcelOutput에서 SQL 파라미터 표시에 사용
+
+#### 최종 결과
+
+**제거된 코드** (6개 메서드, 1개 필드):
+```java
+// MainFrame.java
+- private JLabel createColoredLabel(String text, Color color)
+
+// FlowNode.java
+- public void addCallArgument(String argument)
+- public String getCallArgumentsAsString()
+
+// FlowResult.java
+- public List<FlowNode> findFlowsByUrl(String urlPattern)
+- public List<FlowNode> findFlowsByClass(String className)
+- private boolean containsClass(FlowNode node, String className)
+
+// MethodCall.java
+- public String getArgumentsAsString()
+
+// ClassType.java
+- private final String description 필드
+- public String getDescription()
+```
+
+**유지된 코드** (실제 사용 중):
+- `ParameterInfo.isSpringInjected()` - ConsoleOutput:212
+- `SqlInfo.getSqlParametersAsString()` - ExcelOutput:423
+
+#### 향후 작업 (별도 PR)
+
+**중복 코드 리팩토링** 필요:
+- `ResultPanel.center()` ↔ `ConsoleOutput.center()` 중복
+- `ResultPanel.getDisplayWidth()` ↔ `ConsoleOutput.getDisplayWidth()` 중복
+- → 공통 유틸 클래스(`StringUtils` 또는 `DisplayUtils`)로 분리 권장
+
+#### 배운 점
+
+1. **코드 검토 자동화**: 병렬 에이전트로 대규모 검토 효율화 가능
+2. **정적 분석의 한계**: 람다/스트림 내부 호출은 grep으로 놓치기 쉬움
+3. **빌드 테스트 필수**: 제거 전 반드시 빌드/테스트로 검증
+4. **점진적 정리**: 한 번에 모두 제거하지 말고 단계별로 검증
+
+---
+
 ## 자주 발생하는 문제
 
 ### Gradle 빌드 관련

@@ -203,29 +203,6 @@ public class FlowNode {
         this.callArguments = callArguments;
     }
 
-    public void addCallArgument(String argument) {
-        if (argument != null && !argument.isEmpty()) {
-            this.callArguments.add(argument);
-        }
-    }
-
-    /**
-     * 호출 인자가 있는지 확인
-     */
-    public boolean hasCallArguments() {
-        return callArguments != null && !callArguments.isEmpty();
-    }
-
-    /**
-     * 호출 인자를 문자열로 반환
-     */
-    public String getCallArgumentsAsString() {
-        if (callArguments == null || callArguments.isEmpty()) {
-            return "";
-        }
-        return String.join(", ", callArguments);
-    }
-
     public int getDepth() {
         return depth;
     }
