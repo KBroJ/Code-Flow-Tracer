@@ -1428,5 +1428,178 @@ private static class LocalDateTimeAdapter extends TypeAdapter<LocalDateTime> {
    - 문서화하여 향후 리팩토링 계획 수립
 
 **다음 할 일**
-- JSON 단일 저장으로 통합 리팩토링 (v1.2에서 진행 권장)
-- 기존 Registry 설정 마이그레이션 로직 구현
+- ~~JSON 단일 저장으로 통합 리팩토링 (v1.2에서 진행 권장)~~ ✅ Session 20에서 완료
+- ~~기존 Registry 설정 마이그레이션 로직 구현~~ ✅ Session 20에서 완료
+
+---
+
+### 2025-12-31 (화) - Session 20
+
+#### Session 20: 기술 부채 청산 - Registry → JSON 단일 저장 통합
+
+> 🎯 **핵심 주제**: 기술 부채를 발견하고, 분석하고, 즉시 해결한 사례
+
+**배경**
+
+Session 19에서 발견한 "설정 이중 저장" 문제를 바로 해결하기로 결정.
+원래 v1.2에서 하려던 계획이었지만, "어렵지 않다면 지금 하자"는 판단.
+
+**문제 상황 (Before)**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    설정 저장 구조 (Before)                    │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌─────────────────────┐    ┌─────────────────────────────┐ │
+│  │  Registry (Windows) │    │  JSON 파일                   │ │
+│  │  HKCU\Software\     │    │  ~/.code-flow-tracer/        │ │
+│  │  JavaSoft\Prefs\... │    │  session.json                │ │
+│  ├─────────────────────┤    ├─────────────────────────────┤ │
+│  │ • 최근 경로          │    │ • 분석 결과 (FlowResult)     │ │
+│  │ • URL 필터  ◄────────┼────┼─► URL 필터 (중복!)          │ │
+│  │ • 출력 스타일 ◄──────┼────┼─► 출력 스타일 (중복!)       │ │
+│  └─────────────────────┘    └─────────────────────────────┘ │
+│                                                             │
+│  GUI 삭제 메뉴: "설정 초기화" / "세션 삭제" (2개 분리)        │
+└─────────────────────────────────────────────────────────────┘
+
+문제점:
+- URL 필터, 출력 스타일이 두 곳에 중복 저장
+- Registry는 Windows 전용, 다른 OS에서 동작 방식이 다름
+- 삭제 메뉴가 2개로 분리되어 사용자 혼란
+- 디버깅 어려움 (regedit 필요)
+```
+
+**해결 과정**
+
+1. **난이도 판단** (5분)
+   - SessionData에 필드 1개 추가
+   - SessionManager에 메서드 2개 추가
+   - MainFrame에서 Preferences 코드 제거
+   - 예상 소요: 30분 → "지금 하자"
+
+2. **구현** (25분)
+
+   ```java
+   // 1. SessionData.java - recentPaths 추가
+   private List<String> recentPaths;
+
+   public void addRecentPath(String path) {
+       if (recentPaths == null) recentPaths = new ArrayList<>();
+       recentPaths.remove(path);  // 중복 제거
+       recentPaths.add(0, path);  // 맨 앞에 추가
+       while (recentPaths.size() > 10) {
+           recentPaths.remove(recentPaths.size() - 1);  // 최대 10개 유지
+       }
+   }
+
+   // 2. SessionManager.java - 설정 전용 메서드
+   public SessionData loadSettings() { ... }  // 분석 결과 없어도 로드
+   public boolean saveSettings(List<String> paths, String filter, String style) { ... }
+
+   // 3. MainFrame.java - Preferences 완전 제거
+   // import java.util.prefs.Preferences; → 삭제
+   // private final Preferences prefs = ... → 삭제
+   // prefs.get(), prefs.put() → sessionManager.loadSettings(), saveSettings()
+   ```
+
+3. **GUI 메뉴 통합**
+   - 기존: "설정 초기화" + "세션 삭제"
+   - 변경: "설정/세션 초기화" (1개로 통합)
+
+**결과 (After)**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    설정 저장 구조 (After)                    │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌─────────────────────────────────────────────────────────┐ │
+│  │  JSON 파일: ~/.code-flow-tracer/session.json            │ │
+│  ├─────────────────────────────────────────────────────────┤ │
+│  │  {                                                      │ │
+│  │    "projectPath": "/path/to/project",                   │ │
+│  │    "recentPaths": ["/path1", "/path2"],  ← 통합됨       │ │
+│  │    "urlFilter": "/api/*",                               │ │
+│  │    "outputStyle": "normal",                             │ │
+│  │    "analyzedAt": "2025-12-31T...",                      │ │
+│  │    "flowResult": { ... }                                │ │
+│  │  }                                                      │ │
+│  └─────────────────────────────────────────────────────────┘ │
+│                                                             │
+│  GUI 삭제 메뉴: "설정/세션 초기화" (1개로 통합)               │
+└─────────────────────────────────────────────────────────────┘
+
+장점:
+✅ 단일 저장소 - 관리 용이
+✅ 크로스 플랫폼 - Windows/Mac/Linux 동일 동작
+✅ 디버깅 용이 - 텍스트 에디터로 확인 가능
+✅ 백업 간편 - 파일 복사만으로 완료
+✅ GUI 단순화 - 삭제 버튼 1개
+```
+
+**코드 변경량**
+
+| 파일 | 추가 | 삭제 | 설명 |
+|------|------|------|------|
+| SessionData.java | +23 | +0 | recentPaths, hasSettings() |
+| SessionManager.java | +35 | +0 | loadSettings(), saveSettings() |
+| MainFrame.java | +30 | -40 | Preferences 제거, 메뉴 통합 |
+| **합계** | **+88** | **-40** | 순증가 48줄 |
+
+**배운 점 (러너스하이 어필 포인트)**
+
+1. **"나중에" vs "지금"의 판단**
+   - 기술 부채를 v1.2로 미루려 했으나, 난이도 평가 결과 30분 작업
+   - "어렵지 않으면 지금 하자" → 즉시 해결
+   - 미루면 컨텍스트 손실, 다시 파악하는 데 더 오래 걸림
+
+2. **기술 부채 발견 → 분석 → 해결의 사이클**
+   ```
+   발견 (Session 19) → 문서화 → 난이도 평가 → 즉시 해결 (Session 20)
+   │                    │          │              │
+   └── 30분 ──────────────────────────────────────┘
+   ```
+
+3. **의사결정 문서화의 가치**
+   - 문제 상황을 ISSUES.md에 기록하면서 해결책이 명확해짐
+   - 저장 방식 비교표 작성 → 자연스럽게 JSON이 정답임을 확인
+   - 블로그 포스트로 바로 활용 가능한 자료 축적
+
+4. **리팩토링과 기능 추가의 균형**
+   - 새 기능(Session Persistence) 개발 중 발견한 기술 부채
+   - 기능 완성 후 바로 리팩토링하여 깔끔한 상태 유지
+   - "기능 완성 → 문제 발견 → 즉시 개선" 사이클
+
+**기술 블로그 주제 아이디어**
+
+1. **"Java 앱에서 설정 저장: Registry vs JSON 파일"**
+   - Preferences API의 한계
+   - Gson을 활용한 JSON 저장의 장점
+   - 크로스 플랫폼 고려사항
+
+2. **"기술 부채를 대하는 자세: 미루기 vs 즉시 해결"**
+   - 난이도 평가의 중요성
+   - 컨텍스트 손실 비용
+   - 문서화가 의사결정을 돕는 방법
+
+3. **"레거시 코드에서 발견한 설계 문제 해결기"**
+   - 이중 저장 문제 발견 과정
+   - 단일 저장소로 통합하는 리팩토링
+   - Before/After 비교
+
+**테스트 완료**
+- [x] 빌드 성공 (compileJava)
+- [x] 전체 테스트 통과 (./gradlew test)
+- [x] 문서 업데이트 (ISSUES.md #020 해결, TODO.md, DESIGN.md)
+
+**커밋**
+```
+refactor: JSON 단일 저장으로 통합 (Registry 제거)
+
+- SessionData: recentPaths 필드 추가
+- SessionManager: loadSettings(), saveSettings() 메서드 추가
+- MainFrame: Preferences API 완전 제거, SessionManager로 통합
+- GUI: 삭제 메뉴 통합 (설정 초기화 + 세션 삭제 → 설정/세션 초기화)
+```
