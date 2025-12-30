@@ -513,15 +513,6 @@ public class MainFrame extends JFrame {
     }
 
     /**
-     * 색상 적용된 라벨 생성
-     */
-    private JLabel createColoredLabel(String text, Color color) {
-        JLabel label = new JLabel(text);
-        label.setForeground(color);
-        return label;
-    }
-
-    /**
      * 분석 요약 행 생성 (텍스트 버전)
      */
     private JPanel createSummaryRow(String labelText, JLabel valueLabel, Color labelColor) {
