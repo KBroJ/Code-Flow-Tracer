@@ -1324,3 +1324,109 @@ private static class LocalDateTimeAdapter extends TypeAdapter<LocalDateTime> {
 **참고 자료**
 - Gson User Guide: https://github.com/google/gson/blob/main/UserGuide.md
 - Java Preferences API: https://docs.oracle.com/javase/8/docs/technotes/guides/preferences/
+
+---
+
+### 2025-12-31 (화) - Session 19
+
+#### Session 19: 세션 영속성 TDD 테스트 및 설정 저장 방식 분석
+
+**오늘 한 일**
+
+1. **PR #18 세션 영속성 코드 리뷰**
+   - SessionData.java, SessionManager.java 구조 분석
+   - Gson JSON 직렬화 방식 확인
+   - 저장 위치: `~/.code-flow-tracer/session.json`
+
+2. **TDD 단위 테스트 작성**
+   - `SessionManagerTest.java` 생성 (11개 테스트 케이스)
+     - 세션 저장/로드/삭제 기능 테스트
+     - FlowNode 트리 구조 직렬화/역직렬화 테스트
+     - LocalDateTime 직렬화 테스트
+   - `SessionDataTest.java` 생성 (12개 테스트 케이스)
+     - 유효성 검증 (isValid) 테스트
+     - Getter/Setter 테스트
+     - toString 형식 테스트
+   - 컴파일 오류 수정:
+     - `FlowResult` 생성자 API 수정 (Path 대신 String 사용)
+     - `node.setUrl()` → `node.setUrlMapping()` 변경
+     - 누락된 `Paths` import 추가
+   - 전체 테스트 통과 확인
+
+3. **WiX 설치 파일 세션 폴더 정리 추가**
+   - `installer-resources/main.wxs` 수정
+   - 설치 삭제 시 `~/.code-flow-tracer/` 폴더 자동 정리 추가
+   - `RemoveFile` (session.json) + `RemoveFolder` 설정
+   - `SessionCleanup` 컴포넌트 Feature에 추가
+
+4. **설정 저장 방식 분석 및 이중 저장 문제 발견**
+   - **현재 상태**: 설정이 2곳에 저장됨
+     - Registry (Preferences API): 최근 경로, URL 필터, 출력 스타일
+     - JSON 파일: 세션 데이터 + URL 필터, 출력 스타일 (중복!)
+   - 설정 저장 방식 비교 분석 (아래 표 참고)
+   - 권장: JSON 단일 저장으로 통합
+
+**설정 저장 방식 비교**
+
+| 항목 | Registry (Preferences API) | JSON 파일 |
+|------|---------------------------|-----------|
+| 플랫폼 | Windows 전용 | 크로스 플랫폼 |
+| 저장 위치 | `HKCU\Software\JavaSoft\Prefs\...` | `~/.code-flow-tracer/session.json` |
+| 복잡한 객체 | ❌ 문자열/숫자만 | ✅ 객체 직렬화 가능 |
+| 백업/이동 | ❌ regedit 필요 | ✅ 파일 복사로 가능 |
+| 디버깅 | ❌ 레지스트리 편집기 필요 | ✅ 텍스트 에디터로 확인 |
+| 삭제 시 정리 | WiX RemoveRegistryKey 필요 | WiX RemoveFile로 간단 |
+
+**왜 이중 저장이 발생했는가?**
+
+1. **Session 13 (2025-12-24)**: GUI 설정 저장 기능 구현
+   - 당시 저장 대상: 최근 경로, URL 필터, 출력 스타일
+   - 선택: Java Preferences API (표준 API, 간단한 값 저장에 적합)
+   - 저장 위치: Windows Registry
+
+2. **Session 18 (2025-12-30)**: 세션 영속성 구현
+   - 당시 저장 대상: FlowResult (복잡한 객체 구조)
+   - 선택: Gson JSON 파일 (객체 직렬화 필요)
+   - 추가 저장: URL 필터, 출력 스타일도 함께 저장 (중복 발생)
+
+**권장 해결 방향: JSON 단일 저장으로 통합**
+
+```
+~/.code-flow-tracer/session.json
+{
+  "projectPath": "/path/to/project",
+  "recentPaths": [...],           // Registry에서 이동
+  "urlFilter": "/api/*",          // 이미 있음
+  "outputStyle": "normal",        // 이미 있음
+  "analyzedAt": "2025-12-31T...",
+  "flowResult": { ... }
+}
+```
+
+**통합 시 장점**:
+- 설정 관리 일원화 (한 곳에서 관리)
+- 크로스 플랫폼 지원 (Mac/Linux에서도 동일 동작)
+- 디버깅 용이 (JSON 파일 직접 확인 가능)
+- 설치 삭제 시 정리 간단 (파일 삭제만으로 완료)
+
+**통합 시 주의점**:
+- 기존 Registry 설정 마이그레이션 로직 필요 (1회성)
+- WiX main.wxs의 Registry 정리 로직 유지 (마이그레이션 전 사용자 대응)
+
+**배운 점**
+
+1. **설계 단계에서 저장 방식 통일 중요**
+   - 기능 추가 시 기존 저장 방식과의 일관성 검토 필요
+   - 복잡한 객체 저장이 예상되면 처음부터 JSON 선택
+
+2. **TDD 테스트의 가치**
+   - 테스트 작성 중 API 사용법 오류 발견 (FlowResult 생성자)
+   - 리팩토링 시 안전망 역할
+
+3. **기술 부채 인식**
+   - 빠른 구현을 위해 발생한 이중 저장
+   - 문서화하여 향후 리팩토링 계획 수립
+
+**다음 할 일**
+- JSON 단일 저장으로 통합 리팩토링 (v1.2에서 진행 권장)
+- 기존 Registry 설정 마이그레이션 로직 구현

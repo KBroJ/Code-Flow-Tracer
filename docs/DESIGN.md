@@ -548,9 +548,61 @@ UserService       UserServiceImpl, UserServiceV2, UserServiceV3
 
 ## 9. 설정 저장 및 배포
 
-### 9.1 사용자 설정 저장
+### 9.1 설정 저장 방식
 
-**저장 방식**: Java Preferences API
+#### 현재 상태 (v1.0 ~ v1.1)
+
+> ⚠️ **기술 부채**: 현재 설정이 2곳에 중복 저장되고 있습니다.
+
+| 저장소 | 저장 항목 | 도입 시점 |
+|--------|----------|----------|
+| Registry (Preferences API) | 최근 경로, URL 필터, 출력 스타일 | Session 13 (2025-12-24) |
+| JSON 파일 (`session.json`) | 분석 결과, URL 필터, 출력 스타일 | Session 18 (2025-12-30) |
+
+- URL 필터, 출력 스타일이 **두 곳에 중복 저장**됨
+- 향후 v1.2에서 JSON 단일 저장으로 통합 예정
+
+#### 저장 방식 비교
+
+| 항목 | Registry (Preferences API) | JSON 파일 |
+|------|---------------------------|-----------|
+| 플랫폼 | Windows에서는 Registry, 기타 OS는 파일 | 모든 OS에서 동일 |
+| 저장 위치 | `HKCU\Software\JavaSoft\Prefs\...` | `~/.code-flow-tracer/session.json` |
+| 복잡한 객체 | ❌ 문자열/숫자만 | ✅ 객체 직렬화 가능 |
+| 백업/이동 | ❌ regedit 내보내기 필요 | ✅ 파일 복사로 가능 |
+| 디버깅 | ❌ 레지스트리 편집기 필요 | ✅ 텍스트 에디터로 확인 |
+| 삭제 시 정리 | WiX RemoveRegistryKey 필요 | WiX RemoveFile로 간단 |
+| 표준 API | ✅ Java 표준 | ❌ Gson 의존 |
+
+#### 권장 해결 방향 (v1.2 예정)
+
+**JSON 단일 저장으로 통합**:
+
+```json
+// ~/.code-flow-tracer/session.json
+{
+  "projectPath": "/path/to/project",
+  "recentPaths": ["/path1", "/path2"],  // Registry에서 이동
+  "urlFilter": "/api/*",
+  "outputStyle": "normal",
+  "analyzedAt": "2025-12-31T14:30:00",
+  "flowResult": { ... }
+}
+```
+
+**통합 시 장점**:
+- 설정 관리 일원화
+- 크로스 플랫폼 완전 지원
+- 디버깅/백업 용이
+- 설치 삭제 시 정리 간단
+
+**마이그레이션 전략**:
+1. 앱 시작 시 Registry에서 설정 읽기 시도
+2. 있으면 JSON으로 마이그레이션 후 Registry 삭제
+3. 없으면 JSON에서만 로드
+4. WiX의 Registry 정리 로직은 1~2 버전간 유지 (이전 버전 사용자 대응)
+
+#### 현재 Registry 저장 구현 (Session 13)
 
 ```java
 // MainFrame.java
@@ -577,10 +629,16 @@ String pathsStr = prefs.get("recentPaths", "");
 - `urlFilter`: URL 필터 패턴
 - `outputStyle`: 출력 스타일 (compact/normal/detailed)
 
-**설계 결정 이유**:
+**설계 결정 이유 (당시)**:
 - Java 표준 API로 크로스 플랫폼 지원
 - 별도 설정 파일 관리 불필요
 - 설치 폴더(Program Files)에는 쓰기 권한이 없어 외부 저장 필요
+
+**왜 JSON으로 통합해야 하는가**:
+- Session 18에서 FlowResult 저장을 위해 JSON 도입
+- 복잡한 객체 저장에는 JSON이 필수
+- 두 저장소 관리는 복잡도 증가
+- 상세 분석은 [ISSUES.md #020](ISSUES.md) 참조
 
 ### 9.2 설치 파일 (jpackage)
 
