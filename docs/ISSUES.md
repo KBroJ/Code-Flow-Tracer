@@ -938,6 +938,149 @@ private JPanel createSummaryRow(JLabel label, JLabel valueLabel) {
 
 ---
 
+### Issue #023: URL 필터 적용 시 분석 요약 통계 미반영
+
+**발생일**: 2025-12-31
+**상태**: 🟢 해결됨
+
+#### 문제 상황
+URL 필터를 적용해도 분석 요약의 Controller/Service/DAO 개수가 변하지 않음
+- 예: `/user/*` 필터 적용 시 엔드포인트는 5개로 줄어들지만, Controller는 여전히 2개로 표시
+- 기대: 필터된 결과에 포함된 클래스만 카운트
+
+#### 원인 분석
+- `result.getControllerCount()` 등 기존 메서드는 **전체 파싱된 클래스** 기준
+- `FlowResult`가 가진 `controllers`, `services`, `daos` 필드는 파싱 시점에 채워짐
+- URL 필터는 `flows`만 필터링하고, 위 필드들은 그대로 유지
+
+```java
+// 문제 코드 (MainFrame.java)
+lblControllerCount.setText(result.getControllerCount() + "개");  // 전체 기준
+```
+
+#### 최종 해결
+**Flow 기반 통계 메서드 추가** (`FlowResult.java`):
+
+```java
+// 실제 호출 흐름에 포함된 클래스만 카운트
+public int getFlowBasedControllerCount() {
+    return countUniqueClassesByType(ClassType.CONTROLLER);
+}
+
+private int countUniqueClassesByType(ClassType type) {
+    Set<String> uniqueClasses = new HashSet<>();
+    for (FlowNode flow : flows) {
+        collectClassesByType(flow, type, uniqueClasses);  // 재귀 탐색
+    }
+    return uniqueClasses.size();
+}
+```
+
+**GUI/Console 출력 수정**:
+- `ConsoleOutput.java:131-138`: `getFlowBasedXxxCount()` 사용
+- `MainFrame.java:807-812`: `getFlowBasedXxxCount()` 사용
+
+#### 결과
+| 항목 | 필터 없음 | `/user/*` 필터 |
+|------|----------|---------------|
+| 엔드포인트 | 11개 | 5개 |
+| Controller | 2개 | 1개 ✅ |
+| Service | 2개 | 1개 ✅ |
+| DAO | 7개 | 2개 ✅ |
+
+#### 배운 점
+1. **통계 기준 명확화**: 전체 파싱 vs 필터된 결과 구분 필요
+2. **재귀 탐색**: 트리 구조에서 특정 타입 노드 수집 시 재귀 활용
+3. **Set으로 중복 제거**: 같은 클래스가 여러 흐름에서 호출될 수 있음
+
+---
+
+### Issue #024: 설치 삭제 시 세션 데이터 유지됨
+
+**발생일**: 2025-12-31
+**상태**: 🟢 해결됨
+
+#### 문제 상황
+프로그램 삭제 후 재설치해도 이전 세션 기록(분석 결과, 설정)이 그대로 남아있음
+- 세션 파일 위치: `~/.code-flow-tracer/session.json`
+- 설치 삭제 후에도 파일이 삭제되지 않음
+
+#### 시도한 해결책 (실패)
+
+1. **`util:RemoveFolderEx` 사용**
+   ```xml
+   <util:RemoveFolderEx Id="RemoveSessionFolderEx" On="uninstall" Property="CFTCLEANUPDIR" />
+   ```
+   - 결과: WiX 컴파일 오류 (exit code 10, 62)
+   - 원인: `Property` 설정, `RegistrySearch` 등 추가 설정 필요
+
+2. **와일드카드 `RemoveFile` + `RemoveFolder`**
+   ```xml
+   <Directory Id="ProfileFolder">
+     <Directory Id="CFTSessionDir" Name=".code-flow-tracer">
+       <Component Id="SessionCleanup" ...>
+         <RemoveFile Id="RemoveAllSessionFiles" Name="*" On="uninstall" />
+         <RemoveFolder Id="RemoveSessionFolder" On="uninstall" />
+       </Component>
+     </Directory>
+   </Directory>
+   ```
+   - 결과: **동작 안 함!**
+   - 레지스트리에 `SessionCleanup=1`은 등록되었지만 파일 삭제 안 됨
+
+#### 원인 분석 (핵심!)
+
+**WiX Directory 구조 문제**:
+- `ProfileFolder`가 `TARGETDIR` **내부에 중첩**되어 있었음
+- WiX는 `ProfileFolder`를 `%USERPROFILE%`이 아닌 **설치 경로의 하위 디렉토리**로 해석
+
+```xml
+<!-- 문제의 구조 -->
+<Directory Id="TARGETDIR" Name="SourceDir">
+  ...
+  <Directory Id="ProfileFolder">  <!-- ← TARGETDIR 안에 있음! -->
+    <Directory Id="CFTSessionDir" Name=".code-flow-tracer">
+```
+
+**결과**: `C:\Program Files\CFT\.code-flow-tracer`를 삭제하려고 시도 (존재하지 않음)
+**실제 위치**: `C:\Users\Winbit\.code-flow-tracer`
+
+#### 최종 해결: CustomAction으로 직접 삭제
+
+WiX Directory 구조 문제를 우회하여 `cmd.exe /c rmdir`로 직접 삭제:
+
+```xml
+<!-- installer-resources/main.wxs -->
+
+<!-- Session folder cleanup via cmd.exe -->
+<CustomAction Id="RemoveSessionFolder"
+              Directory="TARGETDIR"
+              ExeCommand="cmd.exe /c &quot;if exist %USERPROFILE%\.code-flow-tracer rmdir /s /q %USERPROFILE%\.code-flow-tracer&quot;"
+              Execute="deferred"
+              Return="ignore" />
+
+<!-- InstallExecuteSequence에 추가 -->
+<InstallExecuteSequence>
+  ...
+  <Custom Action="RemoveSessionFolder" After="RemoveFiles">REMOVE="ALL"</Custom>
+</InstallExecuteSequence>
+```
+
+**동작 방식**:
+1. `REMOVE="ALL"` 조건: 언인스톨 시에만 실행
+2. `After="RemoveFiles"`: 기본 파일 삭제 후 실행
+3. `%USERPROFILE%` 환경변수로 정확한 경로 지정
+4. `rmdir /s /q`: 폴더와 모든 내용 강제 삭제
+5. `Return="ignore"`: 폴더가 없어도 에러 무시
+
+#### 배운 점
+1. **WiX Directory 중첩 주의**: `ProfileFolder` 같은 특수 디렉토리는 `TARGETDIR` 외부에서 독립적으로 참조해야 함
+2. **레지스트리 등록 ≠ 동작 확인**: 레지스트리에 값이 등록되어도 실제 동작은 별도 검증 필요
+3. **CustomAction이 더 확실**: 복잡한 WiX 설정보다 `cmd.exe` 직접 실행이 더 간단하고 확실
+4. **환경변수 활용**: `%USERPROFILE%`로 사용자별 경로 문제 해결
+
+---
+
 ## 미해결/진행중 문제
 
 (현재 없음)

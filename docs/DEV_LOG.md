@@ -1603,3 +1603,94 @@ refactor: JSON 단일 저장으로 통합 (Registry 제거)
 - MainFrame: Preferences API 완전 제거, SessionManager로 통합
 - GUI: 삭제 메뉴 통합 (설정 초기화 + 세션 삭제 → 설정/세션 초기화)
 ```
+
+---
+
+### 2025-12-31 (화) - Session 21
+
+#### Session 21: URL 필터 통계 버그 수정 및 설치 삭제 시 세션 정리 개선
+
+**오늘 한 일**
+
+1. **Git 최신 변경사항 Pull**
+   - Session 19, 20 작업 내용 가져옴 (12 커밋)
+   - TDD 테스트 추가, Registry→JSON 통합 완료 확인
+
+2. **테스트 및 EXE 빌드**
+   - 전체 테스트 통과 확인 (`./gradlew test`)
+   - WiX 3.14로 EXE 설치파일 빌드 성공
+
+3. **버그 발견: URL 필터 적용 시 분석 요약 통계 미반영 (Issue #023)**
+   - **증상**: URL 필터를 걸어도 분석 요약의 Controller/Service/DAO 개수가 전체 프로젝트 기준으로 표시
+   - **원인**: `result.getControllerCount()` 등이 전체 파싱된 클래스 기준
+   - **해결**:
+     - `FlowResult.java`: flows 기반 통계 메서드 추가
+       - `getFlowBasedTotalClasses()` - 필터된 flows 내 고유 클래스 수
+       - `getFlowBasedControllerCount()` - flows 내 Controller 수
+       - `getFlowBasedServiceCount()` - flows 내 Service 수
+       - `getFlowBasedDaoCount()` - flows 내 DAO 수
+       - `getFlowBasedEndpointCount()` - flows 개수
+     - `ConsoleOutput.java:131-138`: FlowBased 메서드 사용으로 변경
+     - `MainFrame.java:807-812`: GUI도 FlowBased 메서드 사용으로 변경
+
+4. **버그 수정: 분석 시 요약 패널 깜빡임**
+   - **증상**: 분석 실행할 때마다 분석 요약 영역이 사라졌다 나타남
+   - **원인**: `startAnalysis()`에서 `summaryPanel.setVisible(false)` 호출
+   - **해결**:
+     - `summaryPanel.setVisible(false)` 제거
+     - 대신 통계 값을 "-"로 표시하여 분석 중 상태 표현
+     - `summaryPanel.setVisible(true)` 호출도 제거 (불필요)
+
+5. **버그 수정: 설치 삭제 시 세션 데이터 유지됨 (Issue #024)**
+   - **증상**: 프로그램 삭제 후 재설치해도 이전 세션 기록이 남아있음
+   - **시도한 방법** (모두 실패):
+     - `util:RemoveFolderEx` 사용 → WiX 컴파일 오류 (exit code 10, 62)
+     - `RemoveFile Name="*"` 와일드카드 → 레지스트리 등록되나 삭제 안 됨
+   - **진짜 원인 발견**: WiX Directory 구조 문제!
+     - `ProfileFolder`가 `TARGETDIR` 내부에 중첩
+     - WiX가 `%USERPROFILE%`이 아닌 설치 경로의 하위로 해석
+   - **최종 해결**: CustomAction으로 `cmd.exe /c rmdir` 직접 실행
+     ```xml
+     <CustomAction Id="RemoveSessionFolder"
+                   Directory="TARGETDIR"
+                   ExeCommand="cmd.exe /c &quot;if exist %USERPROFILE%\.code-flow-tracer rmdir /s /q %USERPROFILE%\.code-flow-tracer&quot;"
+                   Execute="deferred" Return="ignore" />
+     <Custom Action="RemoveSessionFolder" After="RemoveFiles">REMOVE="ALL"</Custom>
+     ```
+
+**기술적 배움**
+
+1. **Flow 기반 통계 vs 전체 파싱 통계**
+   - 전체 파싱: 프로젝트의 모든 클래스 카운트
+   - Flow 기반: 실제 호출 흐름에 포함된 클래스만 카운트
+   - URL 필터 적용 시 Flow 기반이 정확한 통계 제공
+
+2. **WiX Directory 중첩 문제** ⚠️
+   - `ProfileFolder`가 `TARGETDIR` 안에 중첩되면 경로 해석 오류
+   - 레지스트리에 값이 등록되어도 실제 동작은 별도 검증 필요
+   - 특수 디렉토리는 `TARGETDIR` 외부에서 독립적으로 참조해야 함
+
+3. **CustomAction이 더 확실**
+   - 복잡한 WiX Directory 설정보다 `cmd.exe` 직접 실행이 간단
+   - `%USERPROFILE%` 환경변수로 사용자별 경로 문제 해결
+   - `Return="ignore"`로 폴더 부재 시 에러 방지
+
+4. **Swing UI 상태 표시**
+   - 컴포넌트를 숨기는 것보다 "분석 중" 상태 표시가 UX에 좋음
+   - 레이아웃 변경 없이 값만 업데이트하는 것이 깔끔
+
+**변경 파일**
+
+| 파일 | 변경 내용 |
+|------|----------|
+| `FlowResult.java` | flows 기반 통계 메서드 7개 추가 |
+| `ConsoleOutput.java` | FlowBased 메서드 사용 |
+| `MainFrame.java` | FlowBased 메서드 사용, 패널 깜빡임 수정 |
+| `installer-resources/main.wxs` | CustomAction으로 세션 폴더 삭제 |
+
+**테스트 완료**
+- [x] 빌드 성공 (`./gradlew shadowJar`)
+- [x] 전체 테스트 통과 (`./gradlew test`)
+- [x] GUI 테스트: URL 필터 적용 시 통계 정상 반영
+- [x] EXE 빌드 성공 (`CFT-1.0.0.exe`)
+- [x] 삭제 시 세션 폴더 정상 삭제 확인

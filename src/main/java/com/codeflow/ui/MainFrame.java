@@ -720,7 +720,13 @@ public class MainFrame extends JFrame {
         progressBar.setString("분석 중...");
         statusLabel.setText("프로젝트를 분석하고 있습니다...");
         resultPanel.clear();
-        summaryPanel.setVisible(false);
+
+        // 분석 중 상태 표시 (패널은 유지, 값만 초기화)
+        lblTotalClasses.setText("-");
+        lblControllerCount.setText("-");
+        lblServiceCount.setText("-");
+        lblDaoCount.setText("-");
+        lblEndpointCount.setText("-");
 
         SwingWorker<FlowResult, String> worker = new SwingWorker<>() {
             @Override
@@ -763,7 +769,6 @@ public class MainFrame extends JFrame {
 
                     // 요약 정보 업데이트
                     updateSummaryPanel(result);
-                    summaryPanel.setVisible(true);
 
                     // 엔드포인트 목록 업데이트
                     updateEndpointList(result);
@@ -802,14 +807,14 @@ public class MainFrame extends JFrame {
     }
 
     /**
-     * 분석 요약 패널 업데이트
+     * 분석 요약 패널 업데이트 (flows 기반 통계 - URL 필터 적용 시 필터링된 결과만 표시)
      */
     private void updateSummaryPanel(FlowResult result) {
-        lblTotalClasses.setText(result.getTotalClasses() + "개");
-        lblControllerCount.setText(result.getControllerCount() + "개");
-        lblServiceCount.setText(result.getServiceCount() + "개");
-        lblDaoCount.setText(result.getDaoCount() + "개");
-        lblEndpointCount.setText(result.getEndpointCount() + "개");
+        lblTotalClasses.setText(result.getFlowBasedTotalClasses() + "개");
+        lblControllerCount.setText(result.getFlowBasedControllerCount() + "개");
+        lblServiceCount.setText(result.getFlowBasedServiceCount() + "개");
+        lblDaoCount.setText(result.getFlowBasedDaoCount() + "개");
+        lblEndpointCount.setText(result.getFlowBasedEndpointCount() + "개");
     }
 
     /**
@@ -997,7 +1002,6 @@ public class MainFrame extends JFrame {
         SwingUtilities.invokeLater(() -> {
             // 요약 정보 업데이트
             updateSummaryPanel(currentResult);
-            summaryPanel.setVisible(true);
 
             // 엔드포인트 목록 업데이트
             updateEndpointList(currentResult);

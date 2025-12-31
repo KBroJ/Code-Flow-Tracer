@@ -128,14 +128,14 @@ public class ConsoleOutput {
         out.println("  " + color("분석 시간:", GRAY) + " " + result.getAnalyzedAt().format(formatter));
         out.println();
 
-        // 통계 테이블
+        // 통계 테이블 (flows 기반 - URL 필터 적용 시 필터링된 결과만 표시)
         out.println("  " + repeat("─", 30));
-        out.printf("  %-15s %s%n", "전체 클래스:", color(String.valueOf(result.getTotalClasses()), BOLD) + "개");
-        out.printf("    %-13s %s%n", "Controller:", colorByType(result.getControllerCount(), ClassType.CONTROLLER));
-        out.printf("    %-13s %s%n", "Service:", colorByType(result.getServiceCount(), ClassType.SERVICE));
-        out.printf("    %-13s %s%n", "DAO:", colorByType(result.getDaoCount(), ClassType.DAO));
+        out.printf("  %-15s %s%n", "전체 클래스:", color(String.valueOf(result.getFlowBasedTotalClasses()), BOLD) + "개");
+        out.printf("    %-13s %s%n", "Controller:", colorByType(result.getFlowBasedControllerCount(), ClassType.CONTROLLER));
+        out.printf("    %-13s %s%n", "Service:", colorByType(result.getFlowBasedServiceCount(), ClassType.SERVICE));
+        out.printf("    %-13s %s%n", "DAO:", colorByType(result.getFlowBasedDaoCount(), ClassType.DAO));
         out.println("  " + repeat("─", 30));
-        out.printf("  %-15s %s%n", "엔드포인트:", color(String.valueOf(result.getEndpointCount()), BOLD + GREEN) + "개");
+        out.printf("  %-15s %s%n", "엔드포인트:", color(String.valueOf(result.getFlowBasedEndpointCount()), BOLD + GREEN) + "개");
 
         if (result.getUnmappedCallCount() > 0) {
             out.printf("  %-15s %s%n", "미매핑 호출:", color(String.valueOf(result.getUnmappedCallCount()), RED) + "개");
