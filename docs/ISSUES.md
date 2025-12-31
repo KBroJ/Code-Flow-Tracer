@@ -1005,19 +1005,7 @@ private int countUniqueClassesByType(ClassType type) {
 - 세션 파일 위치: `~/.code-flow-tracer/session.json`
 - 설치 삭제 후에도 파일이 삭제되지 않음
 
-#### 원인 분석
-WiX의 `RemoveFile` 동작 방식:
-- **설치 시 생성된 파일만 추적** (Component 기반)
-- 프로그램 **실행 중 생성된 파일은 추적하지 않음**
-
-```xml
-<!-- 기존 설정 (동작 안 함) -->
-<RemoveFile Id="RemoveSessionFile" Name="session.json" On="uninstall" />
-```
-
-`session.json`은 앱 실행 중 생성되므로 WiX가 추적하지 못함.
-
-#### 시도한 해결책
+#### 시도한 해결책 (실패)
 
 1. **`util:RemoveFolderEx` 사용**
    ```xml
@@ -1026,36 +1014,70 @@ WiX의 `RemoveFile` 동작 방식:
    - 결과: WiX 컴파일 오류 (exit code 10, 62)
    - 원인: `Property` 설정, `RegistrySearch` 등 추가 설정 필요
 
-2. **와일드카드 `RemoveFile`** ✅
+2. **와일드카드 `RemoveFile` + `RemoveFolder`**
    ```xml
-   <RemoveFile Id="RemoveAllSessionFiles" Name="*" On="uninstall" />
-   <RemoveFolder Id="RemoveSessionFolder" On="uninstall" />
+   <Directory Id="ProfileFolder">
+     <Directory Id="CFTSessionDir" Name=".code-flow-tracer">
+       <Component Id="SessionCleanup" ...>
+         <RemoveFile Id="RemoveAllSessionFiles" Name="*" On="uninstall" />
+         <RemoveFolder Id="RemoveSessionFolder" On="uninstall" />
+       </Component>
+     </Directory>
+   </Directory>
    ```
-   - 결과: 성공!
-   - `Name="*"`로 폴더 내 모든 파일 삭제
+   - 결과: **동작 안 함!**
+   - 레지스트리에 `SessionCleanup=1`은 등록되었지만 파일 삭제 안 됨
 
-#### 최종 해결
+#### 원인 분석 (핵심!)
+
+**WiX Directory 구조 문제**:
+- `ProfileFolder`가 `TARGETDIR` **내부에 중첩**되어 있었음
+- WiX는 `ProfileFolder`를 `%USERPROFILE%`이 아닌 **설치 경로의 하위 디렉토리**로 해석
+
+```xml
+<!-- 문제의 구조 -->
+<Directory Id="TARGETDIR" Name="SourceDir">
+  ...
+  <Directory Id="ProfileFolder">  <!-- ← TARGETDIR 안에 있음! -->
+    <Directory Id="CFTSessionDir" Name=".code-flow-tracer">
+```
+
+**결과**: `C:\Program Files\CFT\.code-flow-tracer`를 삭제하려고 시도 (존재하지 않음)
+**실제 위치**: `C:\Users\Winbit\.code-flow-tracer`
+
+#### 최종 해결: CustomAction으로 직접 삭제
+
+WiX Directory 구조 문제를 우회하여 `cmd.exe /c rmdir`로 직접 삭제:
 
 ```xml
 <!-- installer-resources/main.wxs -->
-<Directory Id="ProfileFolder">
-  <Directory Id="CFTSessionDir" Name=".code-flow-tracer">
-    <Component Id="SessionCleanup" Guid="...">
-      <RegistryValue Root="HKCU" Key="Software\CFT" Name="SessionCleanup"
-                     Type="integer" Value="1" KeyPath="yes" />
-      <!-- 와일드카드로 폴더 내 모든 파일 삭제 -->
-      <RemoveFile Id="RemoveAllSessionFiles" Name="*" On="uninstall" />
-      <!-- 폴더 삭제 (파일 삭제 후 비어있으면) -->
-      <RemoveFolder Id="RemoveSessionFolder" On="uninstall" />
-    </Component>
-  </Directory>
-</Directory>
+
+<!-- Session folder cleanup via cmd.exe -->
+<CustomAction Id="RemoveSessionFolder"
+              Directory="TARGETDIR"
+              ExeCommand="cmd.exe /c &quot;if exist %USERPROFILE%\.code-flow-tracer rmdir /s /q %USERPROFILE%\.code-flow-tracer&quot;"
+              Execute="deferred"
+              Return="ignore" />
+
+<!-- InstallExecuteSequence에 추가 -->
+<InstallExecuteSequence>
+  ...
+  <Custom Action="RemoveSessionFolder" After="RemoveFiles">REMOVE="ALL"</Custom>
+</InstallExecuteSequence>
 ```
 
+**동작 방식**:
+1. `REMOVE="ALL"` 조건: 언인스톨 시에만 실행
+2. `After="RemoveFiles"`: 기본 파일 삭제 후 실행
+3. `%USERPROFILE%` 환경변수로 정확한 경로 지정
+4. `rmdir /s /q`: 폴더와 모든 내용 강제 삭제
+5. `Return="ignore"`: 폴더가 없어도 에러 무시
+
 #### 배운 점
-1. **WiX RemoveFile의 한계**: 런타임 생성 파일은 기본적으로 추적 안 됨
-2. **와일드카드 활용**: `Name="*"`로 폴더 내 모든 파일 삭제 가능
-3. **util:RemoveFolderEx의 복잡성**: Property, RegistrySearch 등 추가 설정 필요, 간단한 경우 와일드카드가 더 쉬움
+1. **WiX Directory 중첩 주의**: `ProfileFolder` 같은 특수 디렉토리는 `TARGETDIR` 외부에서 독립적으로 참조해야 함
+2. **레지스트리 등록 ≠ 동작 확인**: 레지스트리에 값이 등록되어도 실제 동작은 별도 검증 필요
+3. **CustomAction이 더 확실**: 복잡한 WiX 설정보다 `cmd.exe` 직접 실행이 더 간단하고 확실
+4. **환경변수 활용**: `%USERPROFILE%`로 사용자별 경로 문제 해결
 
 ---
 

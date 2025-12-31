@@ -1643,14 +1643,19 @@ refactor: JSON 단일 저장으로 통합 (Registry 제거)
 
 5. **버그 수정: 설치 삭제 시 세션 데이터 유지됨 (Issue #024)**
    - **증상**: 프로그램 삭제 후 재설치해도 이전 세션 기록이 남아있음
-   - **원인**: WiX `RemoveFile`은 설치 시 생성된 파일만 추적, 실행 중 생성된 파일은 미추적
-   - **시도한 방법**:
-     - `util:RemoveFolderEx` 사용 → WiX 컴파일 오류
-     - `Property` + `RegistrySearch` 조합 → 복잡도 높음
-   - **최종 해결**: `RemoveFile Name="*"` 와일드카드로 폴더 내 모든 파일 삭제
+   - **시도한 방법** (모두 실패):
+     - `util:RemoveFolderEx` 사용 → WiX 컴파일 오류 (exit code 10, 62)
+     - `RemoveFile Name="*"` 와일드카드 → 레지스트리 등록되나 삭제 안 됨
+   - **진짜 원인 발견**: WiX Directory 구조 문제!
+     - `ProfileFolder`가 `TARGETDIR` 내부에 중첩
+     - WiX가 `%USERPROFILE%`이 아닌 설치 경로의 하위로 해석
+   - **최종 해결**: CustomAction으로 `cmd.exe /c rmdir` 직접 실행
      ```xml
-     <RemoveFile Id="RemoveAllSessionFiles" Name="*" On="uninstall" />
-     <RemoveFolder Id="RemoveSessionFolder" On="uninstall" />
+     <CustomAction Id="RemoveSessionFolder"
+                   Directory="TARGETDIR"
+                   ExeCommand="cmd.exe /c &quot;if exist %USERPROFILE%\.code-flow-tracer rmdir /s /q %USERPROFILE%\.code-flow-tracer&quot;"
+                   Execute="deferred" Return="ignore" />
+     <Custom Action="RemoveSessionFolder" After="RemoveFiles">REMOVE="ALL"</Custom>
      ```
 
 **기술적 배움**
@@ -1660,12 +1665,17 @@ refactor: JSON 단일 저장으로 통합 (Registry 제거)
    - Flow 기반: 실제 호출 흐름에 포함된 클래스만 카운트
    - URL 필터 적용 시 Flow 기반이 정확한 통계 제공
 
-2. **WiX RemoveFile의 한계**
-   - 설치 시 생성된 파일만 추적 (Component 기반)
-   - 런타임에 생성된 파일은 와일드카드(`Name="*"`) 필요
-   - `util:RemoveFolderEx`는 추가 설정(Property, RegistrySearch) 필요
+2. **WiX Directory 중첩 문제** ⚠️
+   - `ProfileFolder`가 `TARGETDIR` 안에 중첩되면 경로 해석 오류
+   - 레지스트리에 값이 등록되어도 실제 동작은 별도 검증 필요
+   - 특수 디렉토리는 `TARGETDIR` 외부에서 독립적으로 참조해야 함
 
-3. **Swing UI 상태 표시**
+3. **CustomAction이 더 확실**
+   - 복잡한 WiX Directory 설정보다 `cmd.exe` 직접 실행이 간단
+   - `%USERPROFILE%` 환경변수로 사용자별 경로 문제 해결
+   - `Return="ignore"`로 폴더 부재 시 에러 방지
+
+4. **Swing UI 상태 표시**
    - 컴포넌트를 숨기는 것보다 "분석 중" 상태 표시가 UX에 좋음
    - 레이아웃 변경 없이 값만 업데이트하는 것이 깔끔
 
@@ -1676,10 +1686,11 @@ refactor: JSON 단일 저장으로 통합 (Registry 제거)
 | `FlowResult.java` | flows 기반 통계 메서드 7개 추가 |
 | `ConsoleOutput.java` | FlowBased 메서드 사용 |
 | `MainFrame.java` | FlowBased 메서드 사용, 패널 깜빡임 수정 |
-| `installer-resources/main.wxs` | 와일드카드 파일 삭제로 변경 |
+| `installer-resources/main.wxs` | CustomAction으로 세션 폴더 삭제 |
 
 **테스트 완료**
 - [x] 빌드 성공 (`./gradlew shadowJar`)
 - [x] 전체 테스트 통과 (`./gradlew test`)
 - [x] GUI 테스트: URL 필터 적용 시 통계 정상 반영
 - [x] EXE 빌드 성공 (`CFT-1.0.0.exe`)
+- [x] 삭제 시 세션 폴더 정상 삭제 확인
