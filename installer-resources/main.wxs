@@ -110,11 +110,11 @@
                            Type="integer"
                            Value="1"
                            KeyPath="yes" />
-            <!-- Remove session file on uninstall -->
-            <RemoveFile Id="RemoveSessionFile"
-                        Name="session.json"
+            <!-- 와일드카드로 폴더 내 모든 파일 삭제 -->
+            <RemoveFile Id="RemoveAllSessionFiles"
+                        Name="*"
                         On="uninstall" />
-            <!-- Remove session folder on uninstall (only if empty) -->
+            <!-- 폴더 삭제 (파일 삭제 후 비어있으면) -->
             <RemoveFolder Id="RemoveSessionFolder"
                           On="uninstall" />
           </Component>

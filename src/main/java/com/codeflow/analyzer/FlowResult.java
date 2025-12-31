@@ -1,10 +1,14 @@
 package com.codeflow.analyzer;
 
+import com.codeflow.parser.ClassType;
+
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 호출 흐름 분석 결과
@@ -133,6 +137,82 @@ public class FlowResult {
      */
     public boolean hasMultipleImplWarnings() {
         return multipleImplWarnings != null && !multipleImplWarnings.isEmpty();
+    }
+
+    // ===== Flows 기반 통계 (URL 필터 적용 시 사용) =====
+
+    /**
+     * flows에 포함된 고유 클래스 수 반환 (필터링된 결과 기준)
+     */
+    public int getFlowBasedTotalClasses() {
+        Set<String> uniqueClasses = new HashSet<>();
+        for (FlowNode flow : flows) {
+            collectAllClasses(flow, uniqueClasses);
+        }
+        return uniqueClasses.size();
+    }
+
+    /**
+     * flows에 포함된 Controller 수 반환
+     */
+    public int getFlowBasedControllerCount() {
+        return countUniqueClassesByType(ClassType.CONTROLLER);
+    }
+
+    /**
+     * flows에 포함된 Service 수 반환
+     */
+    public int getFlowBasedServiceCount() {
+        return countUniqueClassesByType(ClassType.SERVICE);
+    }
+
+    /**
+     * flows에 포함된 DAO 수 반환
+     */
+    public int getFlowBasedDaoCount() {
+        return countUniqueClassesByType(ClassType.DAO);
+    }
+
+    /**
+     * flows 개수 (엔드포인트 수)
+     */
+    public int getFlowBasedEndpointCount() {
+        return flows.size();
+    }
+
+    /**
+     * 특정 타입의 고유 클래스 수 계산
+     */
+    private int countUniqueClassesByType(ClassType type) {
+        Set<String> uniqueClasses = new HashSet<>();
+        for (FlowNode flow : flows) {
+            collectClassesByType(flow, type, uniqueClasses);
+        }
+        return uniqueClasses.size();
+    }
+
+    /**
+     * 트리에서 특정 타입의 클래스명 수집 (재귀)
+     */
+    private void collectClassesByType(FlowNode node, ClassType type, Set<String> classes) {
+        if (node.getClassType() == type && node.getClassName() != null) {
+            classes.add(node.getClassName());
+        }
+        for (FlowNode child : node.getChildren()) {
+            collectClassesByType(child, type, classes);
+        }
+    }
+
+    /**
+     * 트리에서 모든 클래스명 수집 (재귀)
+     */
+    private void collectAllClasses(FlowNode node, Set<String> classes) {
+        if (node.getClassName() != null) {
+            classes.add(node.getClassName());
+        }
+        for (FlowNode child : node.getChildren()) {
+            collectAllClasses(child, classes);
+        }
     }
 
     /**
