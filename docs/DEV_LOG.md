@@ -1694,3 +1694,66 @@ refactor: JSON 단일 저장으로 통합 (Registry 제거)
 - [x] GUI 테스트: URL 필터 적용 시 통계 정상 반영
 - [x] EXE 빌드 성공 (`CFT-1.0.0.exe`)
 - [x] 삭제 시 세션 폴더 정상 삭제 확인
+
+---
+
+## Week 5
+
+### 2026-01-03 (금) - Session 22
+
+#### Session 22: CRUD 분석 기능 요구사항 정의 및 GitHub 이슈 등록
+
+**배경**
+
+법원도서관 프로젝트 투입 중 발생한 요구사항:
+- AS-IS 시스템에서 TO-BE로 점진적 마이그레이션 (Strangler Fig 패턴)
+- 각 플랫폼이 어떤 테이블에 어떤 CRUD를 수행하는지 파악 필요
+- 기존 Code Flow Tracer로는 CRUD 타입별 필터링 불가
+
+**오늘 한 일**
+
+1. **요구사항 브레인스토밍**
+   - 사용자 피드백 분석: CRUD 타입별 필터링 필요
+   - 범용성 검토: 특정 프로젝트 특화 vs 범용 기능
+   - Strangler Fig 패턴, CDC, Dual-Write 등 마이그레이션 전략 조사
+
+2. **범용적 기능 3개 도출**
+   - 특화 기능(동기화 감지) 제외, 범용성 높은 기능으로 정리
+   - 어떤 레거시 프로젝트에서든 유용한 기능 선별
+
+3. **GitHub 이슈 등록**
+   - **[#22](https://github.com/KBroJ/Code-Flow-Tracer/issues/22)**: CRUD 타입별 필터링
+     - 다중 선택 가능 (체크박스 방식)
+     - CLI `--sql-type UPDATE,DELETE` 형식
+   - **[#23](https://github.com/KBroJ/Code-Flow-Tracer/issues/23)**: 테이블 중심 분석
+     - Bottom-Up 뷰: 테이블 → 접근 코드
+     - "이 테이블을 누가 건드리나?" 질문에 답변
+   - **[#24](https://github.com/KBroJ/Code-Flow-Tracer/issues/24)**: CRUD 통계 대시보드
+     - 전체/모듈별 CRUD 분포
+     - 테이블별 접근 빈도
+
+4. **문서 현행화**
+   - TODO.md에 신규 이슈 추가
+   - DEV_LOG.md 작성
+
+**기술적 검토**
+
+| 기능 | 기존 데이터 활용 | 난이도 | 비고 |
+|------|----------------|--------|------|
+| CRUD 필터링 | `SqlInfo.SqlType` enum 존재 | 낮음 | 필터 로직만 추가 |
+| 테이블 중심 분석 | `SqlInfo.tables` 존재 | 중간 | 역방향 인덱싱 필요 |
+| CRUD 통계 | 기존 데이터 집계 | 낮음 | 새 파싱 불필요 |
+
+**배운 점**
+
+1. **범용성 vs 특화**
+   - 특정 프로젝트에만 유용한 기능보다 범용적 기능이 도구 가치를 높임
+   - "동기화 감지"보다 "테이블 영향도 분석"이 더 범용적
+
+2. **Strangler Fig 패턴**
+   - 레거시 마이그레이션의 표준 접근법
+   - Dual-Write, CDC, Shadow Read 등 데이터 동기화 전략 학습
+
+**다음 할 일**
+- [ ] CRUD 필터링 기능 구현 (#22)
+- [ ] 러너스하이 경력기술서 작성
