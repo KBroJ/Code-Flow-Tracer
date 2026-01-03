@@ -1,6 +1,6 @@
 # 할 일 목록 (TODO)
 
-> 최종 수정일: 2025-12-31 (Session 21)
+> 최종 수정일: 2026-01-03
 
 ## 진행 상태 범례
 - ✅ 완료
@@ -212,6 +212,27 @@
 - [x] SessionData에 recentPaths 필드 추가
 - [x] 기존 사용자 설정 마이그레이션 테스트
 - [x] GUI 삭제 메뉴 통합 ("설정 초기화" + "세션 삭제" → 단일 메뉴)
+
+**CRUD 타입별 필터링 ([#22](https://github.com/KBroJ/Code-Flow-Tracer/issues/22))** ⏳
+> 피드백: 법원도서관 프로젝트 AS-IS 분석 시 CRUD 타입별 필터 필요
+- [ ] CLI `--sql-type` 옵션 추가 (콤마 구분 다중 선택)
+- [ ] GUI 체크박스 다중 선택 UI
+- [ ] 엑셀 CRUD 타입 컬럼 추가
+- [ ] 세션에 필터 상태 저장
+
+**테이블 중심 분석 ([#23](https://github.com/KBroJ/Code-Flow-Tracer/issues/23))** ⏳
+> 피드백: 테이블 스키마 변경 시 영향 범위 파악 필요
+- [ ] 테이블 → 접근 코드 역방향 인덱싱
+- [ ] GUI 테이블 영향도 탭 추가
+- [ ] CLI `--table`, `--list-tables` 옵션
+- [ ] 엑셀 테이블 영향도 시트 추가
+
+**CRUD 통계 대시보드 ([#24](https://github.com/KBroJ/Code-Flow-Tracer/issues/24))** ⏳
+> 피드백: 프로젝트 전체 CRUD 분포 및 모듈별 역할 파악 필요
+- [ ] 전체 CRUD 분포 통계
+- [ ] 모듈별 CRUD 비율 (READ ONLY / WRITE 위주 구분)
+- [ ] 테이블별 접근 빈도 TOP N
+- [ ] GUI 분석 요약 확장 / CLI `--stats` 옵션
 
 **분기 분석**
 - [ ] if/switch 문 조건 추출
