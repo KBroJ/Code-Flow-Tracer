@@ -66,8 +66,9 @@ docs/
 ├── IMPLEMENTATION_GUIDE.md # 구현 상세 가이드 (코드 흐름, 설계 결정)
 ├── USAGE.md               # 사용법
 ├── TODO.md                # 할 일 목록
-├── DEV_LOG.md             # 개발 일지
-└── ISSUES.md              # 문제 및 해결 과정
+├── DEV_LOG.md             # 개발 일지 (목차 + 현재 주)
+├── ISSUES.md              # 문제 및 해결 과정
+└── dev-log/               # 주별 개발 일지 (WEEK1~4.md)
 ```
 
 ### 문서 작성 원칙
