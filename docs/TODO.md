@@ -255,7 +255,7 @@
 - [x] 기술2: 호출 흐름을 어떻게 따라가나? ([#56](https://kbroj9210.tistory.com/56))
 - [x] 기술3: DAO에서 SQL까지, XML 파싱 ([#57](https://kbroj9210.tistory.com/57))
 - [x] 기술4: 정적 분석의 한계 - 해결할 수 없는 것들 ([#58](https://kbroj9210.tistory.com/58))
-- 🔄 기술5: CLI 출력 구현기 - 초안 완료 (선택)
+- [x] 기술5: CLI 출력 구현기 ([#59](https://kbroj9210.tistory.com/59)) (선택)
 - [ ] 기술6: Excel 출력 - Apache POI (선택)
 - [ ] 기술7: Swing으로 모던한 GUI 만들기 (선택)
 - [ ] 기술8: jpackage로 배포하기 (선택)
