@@ -21,6 +21,7 @@ public class SessionData {
     private String outputStyle;           // 출력 스타일 (compact, normal, detailed)
     private List<String> recentPaths;     // 최근 프로젝트 경로 목록
     private String endpointFilter;        // 엔드포인트 검색 필터 (왼쪽 패널)
+    private List<String> sqlTypeFilter;   // SQL 타입 필터 (SELECT, INSERT, UPDATE, DELETE)
 
     public SessionData() {
     }
@@ -86,6 +87,14 @@ public class SessionData {
 
     public void setEndpointFilter(String endpointFilter) {
         this.endpointFilter = endpointFilter;
+    }
+
+    public List<String> getSqlTypeFilter() {
+        return sqlTypeFilter;
+    }
+
+    public void setSqlTypeFilter(List<String> sqlTypeFilter) {
+        this.sqlTypeFilter = sqlTypeFilter;
     }
 
     /**

@@ -144,7 +144,8 @@ public class SessionManager {
     /**
      * 설정만 저장 (분석 결과는 유지)
      */
-    public boolean saveSettings(java.util.List<String> recentPaths, String urlFilter, String outputStyle, String endpointFilter) {
+    public boolean saveSettings(java.util.List<String> recentPaths, String urlFilter,
+                                String outputStyle, String endpointFilter, java.util.List<String> sqlTypeFilter) {
         // 기존 세션 로드 (분석 결과 유지를 위해)
         SessionData data = loadSettings();
         if (data == null) {
@@ -155,6 +156,7 @@ public class SessionManager {
         data.setUrlFilter(urlFilter);
         data.setOutputStyle(outputStyle);
         data.setEndpointFilter(endpointFilter);
+        data.setSqlTypeFilter(sqlTypeFilter);
 
         return saveSession(data);
     }

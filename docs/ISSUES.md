@@ -1083,7 +1083,152 @@ WiX Directory 구조 문제를 우회하여 `cmd.exe /c rmdir`로 직접 삭제:
 
 ## 미해결/진행중 문제
 
-(현재 없음)
+### Issue #025: GUI CRUD 필터 실시간 적용 불가
+
+**발생일**: 2026-01-12
+**상태**: 🟢 해결됨
+
+#### 문제 상황
+- GUI에서 CRUD 타입 체크박스(SELECT, INSERT, UPDATE, DELETE) 선택 후 실시간 필터링이 안 됨
+- 현재는 체크박스 변경 → "분석 시작" 버튼 클릭 → 전체 재분석 필요
+- 반면, 좌측 엔드포인트 검색창은 입력 즉시 실시간 필터링 됨
+
+```
+현재 동작:
+1. 분석 실행 → 결과 표시
+2. CRUD 체크박스 변경
+3. 다시 "분석 시작" 클릭 필요 ← 문제!
+4. 전체 재분석 (느림)
+
+원하는 동작:
+1. 분석 실행 → 결과 표시
+2. CRUD 체크박스 변경 → 즉시 필터링 ← 목표
+```
+
+#### 원인 분석
+
+**현재 구현 방식 (`MainFrame.java`)**:
+```java
+// startAnalysis() 내부 - 분석 시점에 필터 적용
+if (sqlTypeFilter != null && !sqlTypeFilter.isEmpty()) {
+    result = analyzer.filterBySqlType(result, sqlTypeFilter);  // 분석 단계에서 필터링
+}
+currentResult = result;  // 필터링된 결과만 저장
+```
+
+**문제점**:
+- `currentResult`에 **필터링된** 결과만 저장됨
+- 원본 데이터가 없어서 필터 변경 시 재계산 불가능
+- 체크박스 변경 시 전체 재분석 필요 (비효율적)
+
+#### 대안 비교
+
+| 방식 | 장점 | 단점 | 선택 |
+|------|------|------|------|
+| **A. 원본+필터링 이중 저장** | 빠른 필터 전환 | 메모리 2배, 동기화 복잡 | ❌ |
+| **B. 재분석 (현재 방식)** | 구현 간단 | 느림, UX 불편 | ❌ |
+| **C. 원본 저장 + UI 레이어 필터링** | 빠름, 메모리 효율적, 확장 가능 | 필터 로직 UI에 위치 | ✅ |
+
+**선택: C. 원본 저장 + UI 레이어 필터링**
+
+이유:
+1. 엔드포인트 검색창과 동일한 패턴 (일관성)
+2. 분석은 1회만, 필터는 즉시 적용
+3. 향후 테이블 필터 추가 시에도 동일 패턴 재사용 가능
+
+#### 구현 계획
+
+1. **원본 결과 별도 저장**
+   ```java
+   private FlowResult originalResult;  // 필터 없는 원본
+   private FlowResult currentResult;   // 필터 적용된 현재 표시용
+   ```
+
+2. **체크박스에 실시간 리스너 추가**
+   ```java
+   cbSelect.addActionListener(e -> applyFiltersAndRefresh());
+   cbInsert.addActionListener(e -> applyFiltersAndRefresh());
+   // ...
+   ```
+
+3. **필터 적용 메서드 추가**
+   ```java
+   private void applyFiltersAndRefresh() {
+       if (originalResult == null) return;
+
+       FlowResult filtered = originalResult;
+       if (!isAllSqlTypesSelected()) {
+           FlowAnalyzer analyzer = new FlowAnalyzer();
+           filtered = analyzer.filterBySqlType(originalResult, getSelectedSqlTypes());
+       }
+       currentResult = filtered;
+
+       updateSummaryPanel(filtered);
+       updateEndpointList(filtered);
+       resultPanel.displayResult(filtered, getSelectedStyle());
+   }
+   ```
+
+#### 최종 해결
+
+**변경된 파일**: `MainFrame.java`
+
+1. **원본 결과 필드 추가**
+   ```java
+   private FlowResult originalResult;  // 필터 없는 원본 결과
+   private FlowResult currentResult;   // 현재 표시용 (필터 적용된)
+   ```
+
+2. **체크박스에 ActionListener 추가**
+   ```java
+   cbSelect.addActionListener(e -> applyFiltersAndRefresh());
+   cbInsert.addActionListener(e -> applyFiltersAndRefresh());
+   cbUpdate.addActionListener(e -> applyFiltersAndRefresh());
+   cbDelete.addActionListener(e -> applyFiltersAndRefresh());
+   ```
+
+3. **실시간 필터 적용 메서드 추가**
+   ```java
+   private void applyFiltersAndRefresh() {
+       if (originalResult == null) return;
+
+       FlowResult filtered = originalResult;
+       if (!isAllSqlTypesSelected()) {
+           FlowAnalyzer analyzer = new FlowAnalyzer();
+           filtered = analyzer.filterBySqlType(originalResult, getSelectedSqlTypes());
+       }
+       currentResult = filtered;
+
+       updateSummaryPanel(filtered);
+       updateEndpointList(filtered);
+       resultPanel.displayResult(filtered, getSelectedStyle());
+   }
+   ```
+
+4. **세션 저장/복원 시 원본 데이터 사용**
+   - `saveSession()`: `originalResult` 저장
+   - `restoreSession()`: `originalResult`로 복원 후 CRUD 필터 적용
+
+5. **필터링 로직 버그 수정** (`FlowAnalyzer.java`)
+   - 문제: Controller 노드가 자식 없어도 항상 포함됨
+   - 원인: `filterFlowBySqlType()`에서 Controller 예외 처리
+   ```java
+   // 버그 코드
+   if (!filtered.getChildren().isEmpty() || node.getClassType() == ClassType.CONTROLLER) {
+       return filtered;  // Controller는 자식 없어도 반환
+   }
+
+   // 수정 코드
+   if (!filtered.getChildren().isEmpty()) {
+       return filtered;  // 모든 노드는 자식 있어야 반환
+   }
+   ```
+
+#### 배운 점
+- **데이터와 뷰 분리**: 원본 데이터를 보존해야 필터 전환이 가능
+- **일관된 패턴**: 엔드포인트 검색과 동일한 실시간 필터링 패턴 적용
+- **UI 반응성**: 재분석 없이 즉시 필터링 → UX 개선
+- **재귀 필터링 주의**: 트리 구조 필터링 시 루트 노드 예외 처리는 버그 원인이 될 수 있음
 
 ---
 

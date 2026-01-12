@@ -1,5 +1,6 @@
 package com.codeflow.output;
 
+import com.codeflow.analyzer.FlowAnalyzer;
 import com.codeflow.analyzer.FlowNode;
 import com.codeflow.analyzer.FlowResult;
 import com.codeflow.parser.SqlInfo;
@@ -64,6 +65,7 @@ public class ExcelOutput {
             createSummarySheet(workbook, result);
             createCallFlowSheet(workbook, result);
             createSqlListSheet(workbook, result);
+            createTableImpactSheet(workbook, result);  // 테이블 영향도 시트
 
             // 파일 저장
             try (FileOutputStream fos = new FileOutputStream(outputPath.toFile())) {
@@ -231,12 +233,12 @@ public class ExcelOutput {
     private void createCallFlowSheet(Workbook workbook, FlowResult result) {
         Sheet sheet = workbook.createSheet("호출 흐름");
 
-        // 헤더 (파일명/메소드명 분리, Service 인터페이스/구현체 분리)
+        // 헤더 (파일명/메소드명 분리, Service 인터페이스/구현체 분리, CRUD 타입 추가)
         String[] headers = {"No", "HTTP", "URL",
                 "Controller 파일", "Controller 메소드",
                 "Service 파일", "ServiceImpl 파일", "ServiceImpl 메소드",
                 "DAO 파일", "DAO 메소드",
-                "SQL 파일", "비고"};
+                "SQL 파일", "CRUD", "비고"};
         Row headerRow = sheet.createRow(0);
         for (int i = 0; i < headers.length; i++) {
             Cell cell = headerRow.createCell(i);
@@ -272,14 +274,15 @@ public class ExcelOutput {
                 createCell(row, 8, flatRow.daoFile, rowStyle);
                 createCell(row, 9, flatRow.daoMethod, rowStyle);
                 createCell(row, 10, flatRow.sqlFile, rowStyle);
-                createCell(row, 11, flatRow.remarks, flatRow.hasMultipleImplWarning ? serviceStyle : rowStyle);
+                createCell(row, 11, flatRow.crudType, rowStyle);                 // CRUD 타입
+                createCell(row, 12, flatRow.remarks, flatRow.hasMultipleImplWarning ? serviceStyle : rowStyle);
 
                 rowNum++;
             }
             flowNo++;
         }
 
-        // 열 너비 조정 (파일명/메소드명 분리, Service 인터페이스/구현체 분리)
+        // 열 너비 조정 (파일명/메소드명 분리, Service 인터페이스/구현체 분리, CRUD 타입 추가)
         sheet.setColumnWidth(0, 5 * 256);   // No
         sheet.setColumnWidth(1, 7 * 256);   // HTTP
         sheet.setColumnWidth(2, 25 * 256);  // URL
@@ -291,7 +294,8 @@ public class ExcelOutput {
         sheet.setColumnWidth(8, 18 * 256);  // DAO 파일
         sheet.setColumnWidth(9, 18 * 256);  // DAO 메소드
         sheet.setColumnWidth(10, 18 * 256); // SQL 파일
-        sheet.setColumnWidth(11, 35 * 256); // 비고
+        sheet.setColumnWidth(11, 8 * 256);  // CRUD 타입
+        sheet.setColumnWidth(12, 35 * 256); // 비고
 
         // 필터 추가
         if (rowNum > 1) {
@@ -358,6 +362,10 @@ public class ExcelOutput {
                     if (node.hasSqlInfo()) {
                         SqlInfo sqlInfo = node.getSqlInfo();
                         newPath.sqlFile = sqlInfo.getFileName();
+                        // CRUD 타입 설정
+                        if (sqlInfo.getType() != null) {
+                            newPath.crudType = sqlInfo.getType().name();
+                        }
                     }
                     break;
                 default:
@@ -478,6 +486,99 @@ public class ExcelOutput {
         }
     }
 
+    /**
+     * 테이블 영향도 시트 생성
+     */
+    private void createTableImpactSheet(Workbook workbook, FlowResult result) {
+        Sheet sheet = workbook.createSheet("테이블 영향도");
+
+        // 테이블 인덱스 생성
+        FlowAnalyzer analyzer = new FlowAnalyzer();
+        Map<String, FlowAnalyzer.TableImpact> tableIndex = analyzer.buildTableIndex(result);
+
+        if (tableIndex.isEmpty()) {
+            // 데이터 없을 때
+            Row row = sheet.createRow(0);
+            row.createCell(0).setCellValue("테이블 접근 정보가 없습니다.");
+            return;
+        }
+
+        // 헤더
+        String[] headers = {"No", "테이블명", "접근 횟수", "SELECT", "INSERT", "UPDATE", "DELETE", "접근 URL", "CRUD", "SQL ID"};
+        Row headerRow = sheet.createRow(0);
+        for (int i = 0; i < headers.length; i++) {
+            Cell cell = headerRow.createCell(i);
+            cell.setCellValue(headers[i]);
+            cell.setCellStyle(headerStyle);
+        }
+
+        // 테이블 이름순 정렬
+        List<String> sortedTables = new ArrayList<>(tableIndex.keySet());
+        java.util.Collections.sort(sortedTables);
+
+        // 데이터 출력
+        int rowNum = 1;
+        int tableNo = 1;
+        int colorIndex = 1;
+        for (String tableName : sortedTables) {
+            FlowAnalyzer.TableImpact impact = tableIndex.get(tableName);
+            Map<SqlInfo.SqlType, Long> crudCounts = impact.getCrudCounts();
+
+            // 각 접근마다 행 생성
+            boolean isFirstRow = true;
+            for (FlowAnalyzer.TableAccess access : impact.getAccesses()) {
+                Row row = sheet.createRow(rowNum);
+                CellStyle rowStyle = (colorIndex % 2 == 1) ? normalStyle : alternateStyle;
+
+                // 첫 번째 행에만 테이블명과 통계 표시
+                if (isFirstRow) {
+                    createCell(row, 0, String.valueOf(tableNo), rowStyle);
+                    createCell(row, 1, tableName, rowStyle);
+                    createCell(row, 2, String.valueOf(impact.getAccessCount()), rowStyle);
+                    createCell(row, 3, String.valueOf(crudCounts.getOrDefault(SqlInfo.SqlType.SELECT, 0L)), rowStyle);
+                    createCell(row, 4, String.valueOf(crudCounts.getOrDefault(SqlInfo.SqlType.INSERT, 0L)), rowStyle);
+                    createCell(row, 5, String.valueOf(crudCounts.getOrDefault(SqlInfo.SqlType.UPDATE, 0L)), rowStyle);
+                    createCell(row, 6, String.valueOf(crudCounts.getOrDefault(SqlInfo.SqlType.DELETE, 0L)), rowStyle);
+                    isFirstRow = false;
+                } else {
+                    // 빈 셀
+                    for (int i = 0; i <= 6; i++) {
+                        createCell(row, i, "", rowStyle);
+                    }
+                }
+
+                // 접근 정보
+                String urlInfo = (access.getHttpMethod() != null ? access.getHttpMethod() + " " : "") +
+                                 (access.getUrl() != null ? access.getUrl() : "-");
+                createCell(row, 7, urlInfo, rowStyle);
+                createCell(row, 8, access.getSqlType() != null ? access.getSqlType().name() : "-", rowStyle);
+                createCell(row, 9, access.getSqlId() != null ? access.getSqlId() : "-", rowStyle);
+
+                rowNum++;
+            }
+
+            tableNo++;
+            colorIndex++;
+        }
+
+        // 열 너비 조정
+        sheet.setColumnWidth(0, 5 * 256);   // No
+        sheet.setColumnWidth(1, 20 * 256);  // 테이블명
+        sheet.setColumnWidth(2, 10 * 256);  // 접근 횟수
+        sheet.setColumnWidth(3, 8 * 256);   // SELECT
+        sheet.setColumnWidth(4, 8 * 256);   // INSERT
+        sheet.setColumnWidth(5, 8 * 256);   // UPDATE
+        sheet.setColumnWidth(6, 8 * 256);   // DELETE
+        sheet.setColumnWidth(7, 30 * 256);  // 접근 URL
+        sheet.setColumnWidth(8, 8 * 256);   // CRUD
+        sheet.setColumnWidth(9, 25 * 256);  // SQL ID
+
+        // 필터 추가
+        if (rowNum > 1) {
+            sheet.setAutoFilter(new CellRangeAddress(0, rowNum - 1, 0, headers.length - 1));
+        }
+    }
+
     private void createCell(Row row, int column, String value, CellStyle style) {
         Cell cell = row.createCell(column);
         cell.setCellValue(value != null ? value : "");
@@ -496,6 +597,7 @@ public class ExcelOutput {
         String daoFile = "";
         String daoMethod = "";
         String sqlFile = "";
+        String crudType = "";              // CRUD 타입 (SELECT, INSERT, UPDATE, DELETE)
         boolean hasMultipleImplWarning = false;  // 다중 구현체 경고 여부
         String remarks = "";  // 비고 (다중 구현체 정보 등)
 
@@ -509,6 +611,7 @@ public class ExcelOutput {
             copy.daoFile = this.daoFile;
             copy.daoMethod = this.daoMethod;
             copy.sqlFile = this.sqlFile;
+            copy.crudType = this.crudType;
             copy.hasMultipleImplWarning = this.hasMultipleImplWarning;
             copy.remarks = this.remarks;
             return copy;
@@ -517,12 +620,12 @@ public class ExcelOutput {
         FlatFlowRow toFlatRow() {
             return new FlatFlowRow(controllerFile, controllerMethod,
                     serviceInterfaceFile, serviceImplFile, serviceImplMethod,
-                    daoFile, daoMethod, sqlFile, hasMultipleImplWarning, remarks);
+                    daoFile, daoMethod, sqlFile, crudType, hasMultipleImplWarning, remarks);
         }
     }
 
     /**
-     * 평면화된 호출 흐름 행 (파일명/메소드명 분리, Service 인터페이스/구현체 분리)
+     * 평면화된 호출 흐름 행 (파일명/메소드명 분리, Service 인터페이스/구현체 분리, CRUD 타입 추가)
      */
     private static class FlatFlowRow {
         final String controllerFile;
@@ -533,13 +636,14 @@ public class ExcelOutput {
         final String daoFile;
         final String daoMethod;
         final String sqlFile;
+        final String crudType;              // CRUD 타입 (SELECT, INSERT, UPDATE, DELETE)
         final boolean hasMultipleImplWarning;  // 다중 구현체 경고 여부
         final String remarks;  // 비고
 
         FlatFlowRow(String controllerFile, String controllerMethod,
                    String serviceInterfaceFile, String serviceImplFile, String serviceImplMethod,
-                   String daoFile, String daoMethod, String sqlFile, boolean hasMultipleImplWarning,
-                   String remarks) {
+                   String daoFile, String daoMethod, String sqlFile, String crudType,
+                   boolean hasMultipleImplWarning, String remarks) {
             this.controllerFile = controllerFile;
             this.controllerMethod = controllerMethod;
             this.serviceInterfaceFile = serviceInterfaceFile;
@@ -548,6 +652,7 @@ public class ExcelOutput {
             this.daoFile = daoFile;
             this.daoMethod = daoMethod;
             this.sqlFile = sqlFile;
+            this.crudType = crudType;
             this.hasMultipleImplWarning = hasMultipleImplWarning;
             this.remarks = remarks;
         }

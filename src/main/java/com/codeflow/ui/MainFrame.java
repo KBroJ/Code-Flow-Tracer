@@ -76,6 +76,12 @@ public class MainFrame extends JFrame {
     private JRadioButton rbDetailed;
     private ButtonGroup styleGroup;
 
+    // CRUD 타입 필터 체크박스
+    private JCheckBox cbSelect;
+    private JCheckBox cbInsert;
+    private JCheckBox cbUpdate;
+    private JCheckBox cbDelete;
+
     // 액션 버튼
     private JButton analyzeButton;
     private JButton exportExcelButton;
@@ -89,7 +95,8 @@ public class MainFrame extends JFrame {
     private JLabel statusLabel;
 
     // 분석 결과 캐시
-    private FlowResult currentResult;
+    private FlowResult originalResult;  // 필터 없는 원본 결과
+    private FlowResult currentResult;   // 현재 표시용 (필터 적용된)
     private Path currentProjectPath;
 
     // 세션 관리
@@ -171,6 +178,16 @@ public class MainFrame extends JFrame {
         styleGroup.add(rbCompact);
         styleGroup.add(rbNormal);
         styleGroup.add(rbDetailed);
+
+        // CRUD 타입 필터 체크박스 (기본: 모두 선택)
+        cbSelect = new JCheckBox("SELECT", true);
+        cbInsert = new JCheckBox("INSERT", true);
+        cbUpdate = new JCheckBox("UPDATE", true);
+        cbDelete = new JCheckBox("DELETE", true);
+        cbSelect.setToolTipText("조회 SQL만 표시");
+        cbInsert.setToolTipText("등록 SQL만 표시");
+        cbUpdate.setToolTipText("수정 SQL만 표시");
+        cbDelete.setToolTipText("삭제 SQL만 표시");
 
         // 액션 버튼
         analyzeButton = new JButton("▶  분석 시작");
@@ -459,6 +476,23 @@ public class MainFrame extends JFrame {
         radioPanel.add(rbDetailed);
 
         section.add(radioPanel);
+        section.add(Box.createVerticalStrut(12));
+
+        // CRUD 타입 필터
+        JLabel crudLabel = new JLabel("SQL 타입 필터");
+        crudLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        section.add(crudLabel);
+        section.add(Box.createVerticalStrut(5));
+
+        // CRUD 체크박스 가로 배치 (2x2 그리드)
+        JPanel crudPanel = new JPanel(new GridLayout(1, 4, 4, 0));
+        crudPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        crudPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 25));
+        crudPanel.add(cbSelect);
+        crudPanel.add(cbInsert);
+        crudPanel.add(cbUpdate);
+        crudPanel.add(cbDelete);
+        section.add(crudPanel);
 
         return section;
     }
@@ -594,6 +628,12 @@ public class MainFrame extends JFrame {
             @Override
             public void changedUpdate(DocumentEvent e) { filterEndpointList(); }
         });
+
+        // CRUD 타입 체크박스 실시간 필터링
+        cbSelect.addActionListener(e -> applyFiltersAndRefresh());
+        cbInsert.addActionListener(e -> applyFiltersAndRefresh());
+        cbUpdate.addActionListener(e -> applyFiltersAndRefresh());
+        cbDelete.addActionListener(e -> applyFiltersAndRefresh());
     }
 
     /**
@@ -630,6 +670,7 @@ public class MainFrame extends JFrame {
                 rbNormal.setSelected(true);
                 endpointListModel.clear();  // 왼쪽 엔드포인트 목록 초기화
                 resultPanel.clear();  // 분석 결과 화면도 초기화
+                originalResult = null;  // 원본 결과 초기화
                 currentResult = null;  // 분석 결과 객체도 초기화
                 // 분석 요약도 초기화
                 lblTotalClasses.setText("0개");
@@ -682,6 +723,26 @@ public class MainFrame extends JFrame {
         if (rbCompact.isSelected()) return "compact";
         if (rbDetailed.isSelected()) return "detailed";
         return "normal";
+    }
+
+    /**
+     * 선택된 SQL 타입(CRUD) 필터 가져오기
+     */
+    private List<String> getSelectedSqlTypes() {
+        List<String> types = new ArrayList<>();
+        if (cbSelect.isSelected()) types.add("SELECT");
+        if (cbInsert.isSelected()) types.add("INSERT");
+        if (cbUpdate.isSelected()) types.add("UPDATE");
+        if (cbDelete.isSelected()) types.add("DELETE");
+        return types;
+    }
+
+    /**
+     * 모든 CRUD 타입이 선택되었는지 확인 (필터링 불필요)
+     */
+    private boolean isAllSqlTypesSelected() {
+        return cbSelect.isSelected() && cbInsert.isSelected()
+            && cbUpdate.isSelected() && cbDelete.isSelected();
     }
 
     /**
@@ -750,6 +811,7 @@ public class MainFrame extends JFrame {
                     result = analyzer.analyze(projectPath, parsedClasses);
                 }
 
+                // 원본 결과 반환 (CRUD 필터링은 UI에서 실시간 적용)
                 return result;
             }
 
@@ -764,22 +826,40 @@ public class MainFrame extends JFrame {
             protected void done() {
                 try {
                     FlowResult result = get();
-                    currentResult = result;
+                    originalResult = result;  // 원본 저장
                     currentProjectPath = projectPath;
 
+                    // CRUD 필터 적용하여 currentResult 생성
+                    if (!isAllSqlTypesSelected()) {
+                        List<String> sqlTypes = getSelectedSqlTypes();
+                        if (!sqlTypes.isEmpty()) {
+                            FlowAnalyzer analyzer = new FlowAnalyzer();
+                            currentResult = analyzer.filterBySqlType(originalResult, sqlTypes);
+                        } else {
+                            currentResult = originalResult;
+                        }
+                    } else {
+                        currentResult = originalResult;
+                    }
+
                     // 요약 정보 업데이트
-                    updateSummaryPanel(result);
+                    updateSummaryPanel(currentResult);
 
                     // 엔드포인트 목록 업데이트
-                    updateEndpointList(result);
+                    updateEndpointList(currentResult);
 
                     // 결과 표시
                     String selectedStyle = getSelectedStyle();
-                    resultPanel.displayResult(result, selectedStyle);
+                    resultPanel.displayResult(currentResult, selectedStyle);
 
                     // 상태 업데이트
-                    int endpointCount = result.getFlows().size();
-                    statusLabel.setText(String.format("분석 완료: %d개 URL 발견", endpointCount));
+                    int totalCount = originalResult.getFlows().size();
+                    int shownCount = currentResult.getFlows().size();
+                    if (totalCount == shownCount) {
+                        statusLabel.setText(String.format("분석 완료: %d개 URL 발견", totalCount));
+                    } else {
+                        statusLabel.setText(String.format("분석 완료: %d / %d개 URL (필터 적용)", shownCount, totalCount));
+                    }
                     progressBar.setString("완료");
 
                     exportExcelButton.setEnabled(true);
@@ -788,7 +868,7 @@ public class MainFrame extends JFrame {
                     saveRecentPath(projectPath.toString());
                     saveSettings();
 
-                    // 세션 저장 (분석 결과 영속성)
+                    // 세션 저장 (분석 결과 영속성 - 원본 저장)
                     saveSession();
 
                 } catch (Exception ex) {
@@ -913,6 +993,21 @@ public class MainFrame extends JFrame {
             default:
                 rbNormal.setSelected(true);
         }
+
+        // SQL 타입 필터
+        List<String> sqlTypes = settings.getSqlTypeFilter();
+        if (sqlTypes != null && !sqlTypes.isEmpty()) {
+            cbSelect.setSelected(sqlTypes.contains("SELECT"));
+            cbInsert.setSelected(sqlTypes.contains("INSERT"));
+            cbUpdate.setSelected(sqlTypes.contains("UPDATE"));
+            cbDelete.setSelected(sqlTypes.contains("DELETE"));
+        } else {
+            // 저장된 설정이 없으면 모두 선택
+            cbSelect.setSelected(true);
+            cbInsert.setSelected(true);
+            cbUpdate.setSelected(true);
+            cbDelete.setSelected(true);
+        }
     }
 
     /**
@@ -936,7 +1031,7 @@ public class MainFrame extends JFrame {
         projectPathComboBox.setSelectedItem(newPath);
 
         // JSON에 저장 (왼쪽 필터는 저장하지 않음)
-        sessionManager.saveSettings(paths, urlFilterField.getText().trim(), getSelectedStyle(), null);
+        sessionManager.saveSettings(paths, urlFilterField.getText().trim(), getSelectedStyle(), null, getSelectedSqlTypes());
     }
 
     /**
@@ -950,7 +1045,7 @@ public class MainFrame extends JFrame {
         }
 
         // 왼쪽 엔드포인트 검색 필터는 저장하지 않음 (일시적 UI 상태)
-        sessionManager.saveSettings(paths, urlFilterField.getText().trim(), getSelectedStyle(), null);
+        sessionManager.saveSettings(paths, urlFilterField.getText().trim(), getSelectedStyle(), null, getSelectedSqlTypes());
     }
 
     // ===== 세션 저장/복원 =====
@@ -959,16 +1054,17 @@ public class MainFrame extends JFrame {
      * 세션 저장 (분석 결과 포함)
      */
     private void saveSession() {
-        if (currentResult == null || currentProjectPath == null) {
+        if (originalResult == null || currentProjectPath == null) {
             return;
         }
 
         String urlFilter = urlFilterField.getText().trim();
         String outputStyle = getSelectedStyle();
 
+        // 원본 결과 저장 (필터 없는 상태)
         boolean saved = sessionManager.saveSession(
                 currentProjectPath.toString(),
-                currentResult,
+                originalResult,
                 urlFilter,
                 outputStyle
         );
@@ -994,9 +1090,22 @@ public class MainFrame extends JFrame {
             return;
         }
 
-        // 분석 결과 복원
-        currentResult = session.getFlowResult();
+        // 분석 결과 복원 (원본으로)
+        originalResult = session.getFlowResult();
         currentProjectPath = projectPath;
+
+        // CRUD 필터 적용
+        if (!isAllSqlTypesSelected()) {
+            List<String> sqlTypes = getSelectedSqlTypes();
+            if (!sqlTypes.isEmpty()) {
+                FlowAnalyzer analyzer = new FlowAnalyzer();
+                currentResult = analyzer.filterBySqlType(originalResult, sqlTypes);
+            } else {
+                currentResult = originalResult;
+            }
+        } else {
+            currentResult = originalResult;
+        }
 
         // UI 업데이트
         SwingUtilities.invokeLater(() -> {
@@ -1014,9 +1123,15 @@ public class MainFrame extends JFrame {
             resultPanel.displayResult(currentResult, style);
 
             // 상태 업데이트
-            int endpointCount = currentResult.getFlows().size();
-            statusLabel.setText(String.format("이전 세션 복원됨: %d개 URL (%s)",
-                    endpointCount, session.getAnalyzedAt().toLocalDate()));
+            int totalCount = originalResult.getFlows().size();
+            int shownCount = currentResult.getFlows().size();
+            if (totalCount == shownCount) {
+                statusLabel.setText(String.format("이전 세션 복원됨: %d개 URL (%s)",
+                        totalCount, session.getAnalyzedAt().toLocalDate()));
+            } else {
+                statusLabel.setText(String.format("이전 세션 복원됨: %d / %d개 URL (필터 적용)",
+                        shownCount, totalCount));
+            }
 
             exportExcelButton.setEnabled(true);
 
@@ -1070,6 +1185,43 @@ public class MainFrame extends JFrame {
         }
 
         endpointCountLabel.setText(count + "개 항목");
+    }
+
+    /**
+     * CRUD 필터 적용 및 화면 갱신 (실시간 필터링)
+     */
+    private void applyFiltersAndRefresh() {
+        if (originalResult == null) {
+            return;  // 분석 결과 없으면 무시
+        }
+
+        // 필터링 적용
+        FlowResult filtered = originalResult;
+        if (!isAllSqlTypesSelected()) {
+            List<String> sqlTypes = getSelectedSqlTypes();
+            if (!sqlTypes.isEmpty()) {
+                FlowAnalyzer analyzer = new FlowAnalyzer();
+                filtered = analyzer.filterBySqlType(originalResult, sqlTypes);
+            }
+        }
+        currentResult = filtered;
+
+        // UI 갱신
+        updateSummaryPanel(filtered);
+        updateEndpointList(filtered);
+        resultPanel.displayResult(filtered, getSelectedStyle());
+
+        // 상태 표시
+        int total = originalResult.getFlows().size();
+        int shown = filtered.getFlows().size();
+        if (total == shown) {
+            statusLabel.setText(String.format("전체 %d개 URL", total));
+        } else {
+            statusLabel.setText(String.format("필터 적용: %d / %d개 URL", shown, total));
+        }
+
+        // 설정 저장 (필터 상태)
+        saveSettings();
     }
 
     /**

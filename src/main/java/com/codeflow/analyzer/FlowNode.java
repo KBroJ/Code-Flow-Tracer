@@ -225,6 +225,37 @@ public class FlowNode {
     }
 
     /**
+     * 자식 노드 목록 초기화
+     */
+    public void clearChildren() {
+        this.children = new ArrayList<>();
+    }
+
+    /**
+     * 노드 복사 (자식 노드 제외)
+     */
+    public FlowNode copy() {
+        FlowNode copy = new FlowNode();
+        copy.className = this.className;
+        copy.methodName = this.methodName;
+        copy.classType = this.classType;
+        copy.filePath = this.filePath;
+        copy.urlMapping = this.urlMapping;
+        copy.classUrlMapping = this.classUrlMapping;
+        copy.methodUrlMapping = this.methodUrlMapping;
+        copy.httpMethod = this.httpMethod;
+        copy.sqlId = this.sqlId;
+        copy.sqlQuery = this.sqlQuery;
+        copy.sqlInfo = this.sqlInfo;
+        copy.implementedInterfaces = new ArrayList<>(this.implementedInterfaces);
+        copy.parameters = new ArrayList<>(this.parameters);
+        copy.callArguments = new ArrayList<>(this.callArguments);
+        copy.depth = this.depth;
+        copy.children = new ArrayList<>();  // 자식은 복사하지 않음
+        return copy;
+    }
+
+    /**
      * 엔드포인트(Controller 메서드)인지 확인
      */
     public boolean isEndpoint() {

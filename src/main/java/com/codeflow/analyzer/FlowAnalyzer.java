@@ -113,6 +113,105 @@ public class FlowAnalyzer {
     }
 
     /**
+     * SQL 타입(CRUD)으로 필터링
+     *
+     * @param result 원본 분석 결과
+     * @param sqlTypes 필터링할 SQL 타입 목록 (SELECT, INSERT, UPDATE, DELETE)
+     * @return 필터링된 결과
+     */
+    public FlowResult filterBySqlType(FlowResult result, List<String> sqlTypes) {
+        if (sqlTypes == null || sqlTypes.isEmpty()) {
+            return result;
+        }
+
+        // SQL 타입을 대문자로 변환하여 Set으로 저장
+        Set<SqlInfo.SqlType> filterTypes = new HashSet<>();
+        for (String type : sqlTypes) {
+            try {
+                filterTypes.add(SqlInfo.SqlType.valueOf(type.toUpperCase().trim()));
+            } catch (IllegalArgumentException e) {
+                // 잘못된 타입은 무시
+            }
+        }
+
+        if (filterTypes.isEmpty()) {
+            return result;
+        }
+
+        FlowResult filtered = new FlowResult(result.getProjectPath());
+        filtered.setTotalClasses(result.getTotalClasses());
+        filtered.setControllerCount(result.getControllerCount());
+        filtered.setServiceCount(result.getServiceCount());
+        filtered.setDaoCount(result.getDaoCount());
+
+        for (FlowNode flow : result.getFlows()) {
+            // 해당 플로우에서 SQL 타입이 필터에 매칭되는 노드가 있는지 확인
+            if (hasMatchingSqlType(flow, filterTypes)) {
+                // 플로우를 복사하고 매칭되지 않는 SQL 노드는 제거
+                FlowNode filteredFlow = filterFlowBySqlType(flow, filterTypes);
+                if (filteredFlow != null) {
+                    filtered.addFlow(filteredFlow);
+                }
+            }
+        }
+
+        filtered.setEndpointCount(filtered.getFlows().size());
+        return filtered;
+    }
+
+    /**
+     * FlowNode 트리에서 특정 SQL 타입이 존재하는지 확인
+     */
+    private boolean hasMatchingSqlType(FlowNode node, Set<SqlInfo.SqlType> filterTypes) {
+        if (node.hasSqlInfo()) {
+            SqlInfo sqlInfo = node.getSqlInfo();
+            if (filterTypes.contains(sqlInfo.getType())) {
+                return true;
+            }
+        }
+
+        for (FlowNode child : node.getChildren()) {
+            if (hasMatchingSqlType(child, filterTypes)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * FlowNode 트리에서 특정 SQL 타입만 포함하도록 필터링
+     */
+    private FlowNode filterFlowBySqlType(FlowNode node, Set<SqlInfo.SqlType> filterTypes) {
+        // DAO 노드가 아니면 자식 필터링만 수행
+        if (node.getClassType() != ClassType.DAO) {
+            FlowNode filtered = node.copy();
+            filtered.clearChildren();
+
+            for (FlowNode child : node.getChildren()) {
+                FlowNode filteredChild = filterFlowBySqlType(child, filterTypes);
+                if (filteredChild != null) {
+                    filtered.addChild(filteredChild);
+                }
+            }
+
+            // 자식이 있으면 반환 (Controller도 자식 없으면 제외)
+            if (!filtered.getChildren().isEmpty()) {
+                return filtered;
+            }
+            return null;
+        }
+
+        // DAO 노드: SQL 타입 체크
+        if (node.hasSqlInfo()) {
+            SqlInfo sqlInfo = node.getSqlInfo();
+            if (filterTypes.contains(sqlInfo.getType())) {
+                return node.copy();
+            }
+        }
+        return null;
+    }
+
+    /**
      * 클래스 인덱싱 - 빠른 조회를 위해 Map 생성
      */
     private void indexClasses(List<ParsedClass> parsedClasses) {
@@ -453,5 +552,205 @@ public class FlowAnalyzer {
             return camelCase;
         }
         return Character.toUpperCase(camelCase.charAt(0)) + camelCase.substring(1);
+    }
+
+    // ===== 테이블 중심 분석 (#23) =====
+
+    /**
+     * 테이블 영향도 정보
+     */
+    public static class TableImpact {
+        private final String tableName;
+        private final List<TableAccess> accesses = new ArrayList<>();
+
+        public TableImpact(String tableName) {
+            this.tableName = tableName;
+        }
+
+        public String getTableName() {
+            return tableName;
+        }
+
+        public List<TableAccess> getAccesses() {
+            return accesses;
+        }
+
+        public void addAccess(TableAccess access) {
+            this.accesses.add(access);
+        }
+
+        public int getAccessCount() {
+            return accesses.size();
+        }
+
+        /**
+         * CRUD 타입별 접근 횟수 반환
+         */
+        public Map<SqlInfo.SqlType, Long> getCrudCounts() {
+            Map<SqlInfo.SqlType, Long> counts = new HashMap<>();
+            for (TableAccess access : accesses) {
+                SqlInfo.SqlType type = access.getSqlType();
+                counts.put(type, counts.getOrDefault(type, 0L) + 1);
+            }
+            return counts;
+        }
+    }
+
+    /**
+     * 테이블 접근 정보
+     */
+    public static class TableAccess {
+        private final String url;           // 호출 URL
+        private final String httpMethod;    // HTTP 메서드
+        private final String className;     // DAO 클래스명
+        private final String methodName;    // DAO 메서드명
+        private final SqlInfo.SqlType sqlType;  // CRUD 타입
+        private final String sqlId;         // SQL ID
+
+        public TableAccess(String url, String httpMethod, String className,
+                          String methodName, SqlInfo.SqlType sqlType, String sqlId) {
+            this.url = url;
+            this.httpMethod = httpMethod;
+            this.className = className;
+            this.methodName = methodName;
+            this.sqlType = sqlType;
+            this.sqlId = sqlId;
+        }
+
+        public String getUrl() { return url; }
+        public String getHttpMethod() { return httpMethod; }
+        public String getClassName() { return className; }
+        public String getMethodName() { return methodName; }
+        public SqlInfo.SqlType getSqlType() { return sqlType; }
+        public String getSqlId() { return sqlId; }
+    }
+
+    /**
+     * 테이블 역방향 인덱싱: 테이블 → 접근하는 URL/메서드 목록
+     *
+     * @param result 분석 결과
+     * @return 테이블명 → TableImpact 맵
+     */
+    public Map<String, TableImpact> buildTableIndex(FlowResult result) {
+        Map<String, TableImpact> tableIndex = new HashMap<>();
+
+        for (FlowNode flow : result.getFlows()) {
+            String url = flow.getUrlMapping();
+            String httpMethod = flow.getHttpMethod();
+            collectTableAccesses(flow, url, httpMethod, tableIndex);
+        }
+
+        return tableIndex;
+    }
+
+    /**
+     * FlowNode 트리에서 테이블 접근 정보 수집
+     */
+    private void collectTableAccesses(FlowNode node, String url, String httpMethod,
+                                      Map<String, TableImpact> tableIndex) {
+        // DAO 노드이고 SQL 정보가 있으면 테이블 접근 기록
+        if (node.getClassType() == ClassType.DAO && node.hasSqlInfo()) {
+            SqlInfo sqlInfo = node.getSqlInfo();
+            List<String> tables = sqlInfo.getTables();
+
+            for (String tableName : tables) {
+                TableImpact impact = tableIndex.computeIfAbsent(
+                    tableName.toUpperCase(), TableImpact::new);
+
+                impact.addAccess(new TableAccess(
+                    url,
+                    httpMethod,
+                    node.getClassName(),
+                    node.getMethodName(),
+                    sqlInfo.getType(),
+                    sqlInfo.getFullSqlId()
+                ));
+            }
+        }
+
+        // 자식 노드 재귀 처리
+        for (FlowNode child : node.getChildren()) {
+            collectTableAccesses(child, url, httpMethod, tableIndex);
+        }
+    }
+
+    /**
+     * 특정 테이블에 접근하는 흐름만 필터링
+     *
+     * @param result 원본 분석 결과
+     * @param tableName 필터링할 테이블명
+     * @return 필터링된 결과
+     */
+    public FlowResult filterByTable(FlowResult result, String tableName) {
+        if (tableName == null || tableName.isEmpty()) {
+            return result;
+        }
+
+        String upperTableName = tableName.toUpperCase().trim();
+
+        FlowResult filtered = new FlowResult(result.getProjectPath());
+        filtered.setTotalClasses(result.getTotalClasses());
+        filtered.setControllerCount(result.getControllerCount());
+        filtered.setServiceCount(result.getServiceCount());
+        filtered.setDaoCount(result.getDaoCount());
+
+        for (FlowNode flow : result.getFlows()) {
+            if (hasTableAccess(flow, upperTableName)) {
+                filtered.addFlow(flow);
+            }
+        }
+
+        filtered.setEndpointCount(filtered.getFlows().size());
+        return filtered;
+    }
+
+    /**
+     * FlowNode 트리에서 특정 테이블 접근 여부 확인
+     */
+    private boolean hasTableAccess(FlowNode node, String tableName) {
+        if (node.hasSqlInfo()) {
+            SqlInfo sqlInfo = node.getSqlInfo();
+            for (String table : sqlInfo.getTables()) {
+                if (table.toUpperCase().equals(tableName)) {
+                    return true;
+                }
+            }
+        }
+
+        for (FlowNode child : node.getChildren()) {
+            if (hasTableAccess(child, tableName)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 모든 테이블 목록 추출
+     */
+    public Set<String> getAllTables(FlowResult result) {
+        Set<String> tables = new HashSet<>();
+
+        for (FlowNode flow : result.getFlows()) {
+            collectTables(flow, tables);
+        }
+
+        return tables;
+    }
+
+    /**
+     * FlowNode 트리에서 테이블명 수집
+     */
+    private void collectTables(FlowNode node, Set<String> tables) {
+        if (node.hasSqlInfo()) {
+            SqlInfo sqlInfo = node.getSqlInfo();
+            for (String table : sqlInfo.getTables()) {
+                tables.add(table.toUpperCase());
+            }
+        }
+
+        for (FlowNode child : node.getChildren()) {
+            collectTables(child, tables);
+        }
     }
 }

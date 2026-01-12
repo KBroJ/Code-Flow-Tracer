@@ -13,7 +13,7 @@
 | [Week 2](./dev-log/WEEK2.md) | 12/18~12/22 | iBatis/MyBatis 파싱, Excel 출력 | Session 5-8 |
 | [Week 3](./dev-log/WEEK3.md) | 12/22~12/26 | GUI 구현 및 배포 | Session 9-17 |
 | [Week 4](./dev-log/WEEK4.md) | 12/30~12/31 | 세션 영속성, 기술 부채 청산 | Session 18-21 |
-| Week 5 (현재) | 01/03~ | CRUD 분석 기능, 블로그 | Session 22-25 |
+| Week 5 (현재) | 01/03~ | CRUD 분석 기능, 블로그 | Session 22-27 |
 
 ---
 
@@ -24,7 +24,7 @@ Week 1: 설계 + 기본 파서 ████████████████�
 Week 2: iBatis + 출력   ████████████████████ 100%
 Week 3: GUI + 테스트    ████████████████████ 100%
 Week 4: 세션 영속성     ████████████████████ 100%
-Week 5: CRUD 분석       ████░░░░░░░░░░░░░░░░ 20%
+Week 5: CRUD 분석       ████████████████░░░░ 80%
 ```
 
 ---
@@ -59,8 +59,8 @@ Week 5: CRUD 분석       ████░░░░░░░░░░░░░░
 - ✅ GitHub Release v1.0.0
 
 ### 예정된 기능
-- [ ] CRUD 타입별 필터링 (#22)
-- [ ] 테이블 중심 분석 (#23)
+- [x] CRUD 타입별 필터링 (#22) - 완료
+- [x] 테이블 중심 분석 (#23) - 완료 (GUI 탭 제외)
 - [ ] CRUD 통계 대시보드 (#24)
 
 ---
@@ -274,7 +274,125 @@ Week 5: CRUD 분석       ████░░░░░░░░░░░░░░
 - GitHub 이슈 #23에 실무 피드백 코멘트 추가 완료
 
 **다음 할 일**
-- [ ] CRUD 필터링 기능 구현 (#22)
-- [ ] 테이블 중심 분석 기능 구현 (#23) ← 실무 피드백 반영
+- [x] CRUD 필터링 기능 구현 (#22)
+- [x] 테이블 중심 분석 기능 구현 (#23) ← 실무 피드백 반영
 - [ ] 러너스하이 마무리 회고 글 작성
 - [ ] (선택) 기술7 Swing GUI 블로그
+
+---
+
+### 2026-01-12 (일) - Session 26
+
+#### Session 26: CRUD 필터링 (#22) 및 테이블 중심 분석 (#23) 구현
+
+**문제**: 실무에서 CRUD 타입별 필터링 및 테이블 역추적 기능 필요
+**해결**: #22, #23 이슈 기능 구현 완료
+
+**오늘 한 일**
+1. **#22 CRUD 타입별 필터링 구현**
+   - CLI: `--sql-type SELECT,INSERT,UPDATE,DELETE` 옵션 추가
+   - FlowAnalyzer: `filterBySqlType()` 메서드 추가
+   - GUI: SQL 타입 체크박스 (SELECT/INSERT/UPDATE/DELETE) 추가
+   - 엑셀: 호출 흐름 시트에 CRUD 타입 컬럼 추가
+   - 세션: CRUD 필터 상태 저장/복원
+
+2. **#23 테이블 중심 분석 구현**
+   - FlowAnalyzer: 테이블 역방향 인덱싱 (`buildTableIndex()`, `TableImpact`, `TableAccess`)
+   - CLI: `--table TB_USER` (특정 테이블 접근 흐름만 표시)
+   - CLI: `--list-tables` (테이블 목록 + CRUD 통계 출력)
+   - 엑셀: "테이블 영향도" 시트 추가 (테이블별 접근 횟수, CRUD 통계, URL/SQL ID)
+
+3. **FlowNode에 유틸리티 메서드 추가**
+   - `copy()`: 노드 복사 (자식 제외)
+   - `clearChildren()`: 자식 노드 초기화
+
+**구현 상세**
+
+| 기능 | 구현 위치 | 내용 |
+|------|----------|------|
+| `--sql-type` | Main.java:77-78 | Picocli 옵션 (콤마 split) |
+| `filterBySqlType()` | FlowAnalyzer.java:122-212 | SQL 타입 필터링 로직 |
+| CRUD 체크박스 | MainFrame.java:79-83, 181-189 | SELECT/INSERT/UPDATE/DELETE |
+| CRUD 컬럼 | ExcelOutput.java:239, 275, 362-364 | 호출 흐름 시트 |
+| `buildTableIndex()` | FlowAnalyzer.java:628-644 | 테이블 역방향 인덱싱 |
+| `--table` | Main.java:80-81 | 테이블 필터링 옵션 |
+| `--list-tables` | Main.java:83-84, 328-384 | 테이블 목록 출력 |
+| 테이블 영향도 시트 | ExcelOutput.java:489-580 | 테이블별 접근 정보 |
+
+**배운 점**
+1. **기존 데이터 활용**: SqlInfo.SqlType, SqlInfo.tables가 이미 존재하여 새로운 파싱 없이 구현 가능
+2. **역방향 인덱싱**: `Map<테이블명, List<접근정보>>` 구조로 빠른 조회 가능
+3. **FlowNode 복사**: 필터링 시 원본 수정 방지를 위해 copy() 메서드 필요
+
+**다음 할 일**
+- [ ] CRUD 필터 실시간 적용 (#025)
+- [ ] GUI 테이블 영향도 탭 추가 (복잡한 UI 변경으로 추후 진행)
+- [ ] CRUD 통계 대시보드 (#24)
+- [ ] 러너스하이 마무리 회고 글 작성
+
+---
+
+### 2026-01-12 (일) - Session 27
+
+#### Session 27: CRUD 필터 실시간 적용 구현
+
+**문제**: GUI에서 CRUD 체크박스 변경 시 재분석 필요 (Issue #025)
+**해결**: 원본 데이터 저장 + UI 레이어 필터링으로 실시간 반영
+
+**문제 분석**
+
+현재 구현의 문제점:
+```java
+// startAnalysis() 내부 - 분석 시점에 필터 적용
+if (sqlTypeFilter != null && !sqlTypeFilter.isEmpty()) {
+    result = analyzer.filterBySqlType(result, sqlTypeFilter);
+}
+currentResult = result;  // ← 필터링된 결과만 저장
+```
+- 원본 데이터가 없어서 필터 변경 시 재분석 필요
+- 엔드포인트 검색은 실시간인데 CRUD는 아님 → UX 불일치
+
+**대안 비교**
+
+| 방식 | 장점 | 단점 | 선택 |
+|------|------|------|------|
+| 원본+필터 이중 저장 | 빠름 | 메모리 2배, 동기화 복잡 | ❌ |
+| 재분석 (현재) | 간단 | 느림, UX 불편 | ❌ |
+| **원본 저장 + UI 필터링** | 빠름, 확장 가능 | 필터 로직 UI 위치 | ✅ |
+
+**기술적 결정 이유**
+1. 엔드포인트 검색과 동일 패턴 → 일관성
+2. 분석 1회 + 필터 즉시 적용 → 반응성
+3. 테이블 필터 추가 시에도 재사용 가능 → 확장성
+
+**구현 완료**
+
+1. `originalResult` 필드 추가 (필터 없는 원본)
+2. CRUD 체크박스에 ActionListener 추가
+3. `applyFiltersAndRefresh()` 메서드 추가
+4. 세션 저장/복원 시 원본 데이터 사용
+
+**변경 파일**
+
+1. `MainFrame.java` - 실시간 필터링 UI
+   - Line 98: `originalResult` 필드 추가
+   - Line 632-636: CRUD 체크박스 ActionListener
+   - Line 1157-1192: `applyFiltersAndRefresh()` 메서드
+   - Line 1055-1074: `saveSession()` - 원본 저장
+   - Line 1076-1139: `restoreSession()` - 원본 복원 + 필터 적용
+
+2. `FlowAnalyzer.java` - 필터링 버그 수정
+   - Line 197-198: Controller 예외 처리 제거
+   - 버그: Controller 노드가 자식 없어도 항상 포함됨
+   - 수정: 모든 노드는 필터에 맞는 자식이 있어야만 포함
+
+**배운 점**
+1. **데이터와 뷰 분리**: 원본 데이터 보존으로 필터 전환 가능
+2. **일관된 패턴**: 엔드포인트 검색과 동일한 실시간 필터링 패턴
+3. **UX 개선**: 재분석 없이 즉시 필터링 → 반응성 향상
+4. **재귀 필터링 주의**: 트리 구조 필터링 시 루트 노드 예외 처리 버그 주의
+
+**다음 할 일**
+- [ ] GUI 테이블 영향도 탭 추가
+- [ ] CRUD 통계 대시보드 (#24)
+- [ ] 러너스하이 마무리 회고 글 작성
