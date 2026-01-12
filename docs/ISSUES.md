@@ -1959,6 +1959,121 @@ ExcelOutput.java:423: error: cannot find symbol
 
 ---
 
+### Issue #025: GUI CRUD 필터 실시간 적용 불가
+
+**발생일**: 2026-01-12
+**상태**: ✅ 해결
+
+#### 문제 상황
+
+GUI에서 CRUD 체크박스(SELECT/INSERT/UPDATE/DELETE)를 변경해도 즉시 반영되지 않음.
+- 엔드포인트 검색 필터: 타이핑할 때마다 실시간 필터링 ✅
+- CRUD 타입 필터: 체크박스 변경 후 "분석 시작" 버튼을 다시 눌러야 반영 ❌
+
+**UX 불일치**: 같은 화면에서 필터 동작 방식이 다름
+
+#### 원인 분석
+
+```java
+// MainFrame.java - startAnalysis() 내부
+if (sqlTypeFilter != null && !sqlTypeFilter.isEmpty()) {
+    result = analyzer.filterBySqlType(result, sqlTypeFilter);
+}
+currentResult = result;  // ← 필터링된 결과만 저장
+```
+
+**문제점**:
+- 분석 시점에 CRUD 필터를 적용하여 `currentResult`에 저장
+- 원본 데이터(`originalResult`)가 없어서 필터 변경 시 재분석 필요
+- 프로젝트 규모가 크면 재분석에 수 초~수십 초 소요
+
+#### 고민했던 대안
+
+| 방식 | 장점 | 단점 | 선택 |
+|------|------|------|------|
+| 원본+필터 이중 저장 | 빠름 | 메모리 2배, 동기화 복잡 | ❌ |
+| 재분석 (현재) | 구현 간단 | 느림, UX 불편 | ❌ |
+| **원본 저장 + UI 필터링** | 빠름, 확장 가능 | 필터 로직이 UI에 위치 | ✅ |
+
+#### 기술적 결정 이유
+
+**Option C (원본 저장 + UI 필터링) 선택 근거**:
+1. **일관성**: 엔드포인트 검색과 동일한 실시간 필터링 패턴
+2. **반응성**: 분석 1회 + 필터 즉시 적용 → 체감 속도 향상
+3. **확장성**: 테이블 필터 추가 시에도 동일 패턴 재사용 가능
+
+#### 최종 해결
+
+**1. 원본/현재 결과 분리**
+```java
+private FlowResult originalResult;  // 필터 없는 원본 결과
+private FlowResult currentResult;   // 현재 표시용 (필터 적용된)
+```
+
+**2. CRUD 체크박스에 ActionListener 추가**
+```java
+cbSelect.addActionListener(e -> applyFiltersAndRefresh());
+cbInsert.addActionListener(e -> applyFiltersAndRefresh());
+cbUpdate.addActionListener(e -> applyFiltersAndRefresh());
+cbDelete.addActionListener(e -> applyFiltersAndRefresh());
+```
+
+**3. 실시간 필터링 메서드**
+```java
+private void applyFiltersAndRefresh() {
+    if (originalResult == null) return;
+
+    FlowResult filtered = originalResult;
+    if (!isAllSqlTypesSelected()) {
+        List<String> sqlTypes = getSelectedSqlTypes();
+        if (!sqlTypes.isEmpty()) {
+            FlowAnalyzer analyzer = new FlowAnalyzer();
+            filtered = analyzer.filterBySqlType(originalResult, sqlTypes);
+        }
+    }
+    currentResult = filtered;
+
+    // UI 갱신
+    updateSummaryPanel(filtered);
+    updateEndpointList(filtered);
+    resultPanel.displayResult(filtered, getSelectedStyle());
+}
+```
+
+**4. 세션 저장/복원 수정**
+- `saveSession()`: `originalResult` 저장 (필터 없는 원본)
+- `restoreSession()`: `originalResult` 복원 후 현재 CRUD 필터 적용
+
+#### 발견된 버그 (추가 수정)
+
+**CRUD 필터링 시 DELETE 해제해도 DELETE 항목이 표시됨**
+
+**원인**:
+```java
+// FlowAnalyzer.filterFlowBySqlType() - 기존 코드
+if (!filtered.getChildren().isEmpty() || node.getClassType() == ClassType.CONTROLLER) {
+    return filtered;  // ← Controller는 항상 포함 (버그)
+}
+```
+
+**수정**:
+```java
+// 모든 노드는 필터에 맞는 자식이 있어야만 포함
+if (!filtered.getChildren().isEmpty()) {
+    return filtered;
+}
+return null;
+```
+
+#### 배운 점
+
+1. **데이터와 뷰 분리**: 원본 데이터 보존으로 필터 전환이 자유로워짐
+2. **일관된 UX 패턴**: 같은 화면의 필터는 동일한 동작 방식이어야 함
+3. **재귀 필터링 주의**: 트리 구조 필터링 시 루트 노드 예외 처리 버그 주의
+4. **테스트 중요성**: 구현 후 실제 동작 테스트로 숨은 버그 발견
+
+---
+
 ## 자주 발생하는 문제
 
 ### Gradle 빌드 관련
@@ -2005,6 +2120,165 @@ tasks.withType(JavaCompile) {
     options.encoding = 'UTF-8'
 }
 ```
+
+---
+
+### Issue #026: 테이블 영향도 세션 저장/복원 미동작
+
+**발생일**: 2026-01-12
+**상태**: ✅ 해결
+
+#### 문제 상황
+- 테이블 영향도 탭에서 테이블 선택 후 앱 종료 → 재시작 시 선택 상태 복원 안 됨
+- 호출흐름 탭에서 선택한 엔드포인트도 마찬가지
+
+#### 원인 분석
+- `saveSession()`이 분석 완료 후에만 호출됨
+- 탭 전환, 테이블 선택, 앱 종료 시에는 저장되지 않음
+
+#### 해결
+`windowClosing` 이벤트에서 `saveSession()` 호출 추가:
+```java
+addWindowListener(new java.awt.event.WindowAdapter() {
+    @Override
+    public void windowClosing(java.awt.event.WindowEvent e) {
+        saveSession();  // 종료 전 세션 저장
+        System.exit(0);
+    }
+});
+```
+
+#### 배운 점
+- 세션 저장은 분석 완료 시점뿐 아니라 앱 종료 시점에도 필요
+- UI 상태 변경은 즉시 저장보다 종료 시 일괄 저장이 효율적
+
+---
+
+### Issue #027: 호출흐름 스크롤 복원 타이밍 문제
+
+**발생일**: 2026-01-12
+**상태**: ✅ 해결
+
+#### 문제 상황
+- 세션 복원 시 엔드포인트 선택은 되지만 상세화면이 해당 위치로 스크롤되지 않음
+- 목록에서 엔드포인트가 선택되어 있지만 오른쪽 결과 패널은 최상단 표시
+
+#### 원인 분석
+- `scrollToEndpoint()`가 UI 렌더링 완료 전에 호출됨
+- `resultPane.modelToView()`가 아직 계산되지 않은 상태에서 호출
+
+#### 해결
+`SwingUtilities.invokeLater()` 중첩으로 렌더링 완료 후 스크롤:
+```java
+// UI 업데이트 후 스크롤 (렌더링 완료 대기)
+SwingUtilities.invokeLater(() -> {
+    // ... 다른 UI 업데이트 ...
+
+    // 스크롤은 한 번 더 invokeLater로 감싸서 렌더링 후 실행
+    SwingUtilities.invokeLater(() -> {
+        resultPanel.scrollToEndpoint(savedSelectedEndpoint);
+    });
+});
+```
+
+#### 배운 점
+- Swing에서 UI 조작은 렌더링 완료 후 실행해야 정확히 동작
+- `invokeLater` 중첩으로 렌더링 큐 이후 실행 보장 가능
+
+---
+
+### Issue #028: 테이블 "전체" 선택 시 상세화면 빈 화면
+
+**발생일**: 2026-01-12
+**상태**: ✅ 해결
+
+#### 문제 상황
+- 분석 완료 후 테이블 영향도 탭에서 "전체"가 선택되어 있지만 상세화면이 비어있음
+- 다른 테이블을 선택하면 정상 표시됨
+
+#### 원인 분석
+메서드 호출 순서 문제:
+```java
+// 기존 (잘못된 순서)
+updateTableList(currentResult);           // displayTableAccesses() 호출
+tableImpactPanel.updateData(currentResult);  // tableIndex 설정
+```
+- `updateTableList()`에서 `displayTableAccesses(ALL_TABLES)` 호출 시
+- `tableImpactPanel.tableIndex`가 아직 null이어서 아무것도 표시 안 됨
+
+#### 해결
+호출 순서 변경:
+```java
+// 수정 (올바른 순서)
+tableImpactPanel.updateData(currentResult);  // tableIndex 먼저 설정
+updateTableList(currentResult);              // 그 후 displayTableAccesses() 호출
+```
+
+3곳 모두 수정:
+1. `done()` - 분석 완료 후
+2. `restoreSession()` - 세션 복원 시
+3. `applyFiltersAndRefresh()` - 필터 변경 시
+
+#### 배운 점
+- 데이터 설정 → UI 업데이트 순서가 중요
+- 여러 곳에서 동일 로직 사용 시 모든 곳 일관되게 수정 필요
+
+---
+
+### Issue #029: SQL 필터 변경 시 테이블 선택 상태 초기화
+
+**발생일**: 2026-01-12
+**상태**: ✅ 해결
+
+#### 문제 상황
+- 테이블 영향도 탭에서 테이블을 선택하고 상세화면(쿼리 목록)을 보고 있는 중
+- SQL 필터(SELECT/INSERT/UPDATE/DELETE)를 변경하면 테이블 목록이 "전체"로 리셋됨
+- 쿼리 상세 보기 화면도 초기화되어 사용자가 다시 찾아가야 함
+
+#### 원인 분석
+`applyFiltersAndRefresh()` 메서드가 필터 변경 시:
+1. 테이블 목록을 새로 생성하면서 기존 선택 상태를 저장하지 않음
+2. 결과적으로 항상 첫 번째 항목("전체")이 선택됨
+3. 쿼리 상세 보기 상태도 유지되지 않음
+
+```java
+// 기존 코드 - 상태 저장 없음
+updateTableList(currentResult);  // 항상 "전체" 선택으로 리셋
+```
+
+#### 해결
+필터 적용 전 현재 상태를 저장하고, 필터 적용 후 복원:
+
+```java
+// 수정 - 상태 저장 및 복원
+// 1. 현재 상태 저장
+final int currentTab = resultTabbedPane.getSelectedIndex();
+final String savedTableSelection = tableList.getSelectedValue();
+final boolean savedQueryDetailActive = tableImpactPanel.isQueryDetailViewActive();
+final int savedQueryRowIndex = tableImpactPanel.getSelectedQueryRowIndex();
+
+// 2. 필터 적용 및 데이터 갱신
+tableImpactPanel.updateData(currentResult);
+updateTableListWithoutSelection(currentResult);  // 선택 없이 목록만 갱신
+
+// 3. 상태 복원
+if (savedTableSelection != null) {
+    tableList.setSelectedValue(savedTableSelection, true);
+}
+if (savedQueryDetailActive && savedQueryRowIndex >= 0) {
+    tableImpactPanel.restoreQueryDetailView(savedQueryRowIndex);
+}
+```
+
+주요 변경:
+1. `updateTableListWithoutSelection()` 메서드 추가 - 테이블 목록 갱신 시 선택을 자동으로 하지 않음
+2. 쿼리 상세 보기 상태 저장/복원을 위한 helper 메서드 활용
+3. `SwingUtilities.invokeLater()`로 복원 타이밍 보장
+
+#### 배운 점
+- 필터 변경은 "데이터 갱신"이지만 사용자 관점에서는 "현재 위치 유지"가 자연스러움
+- 상태 저장 → 갱신 → 상태 복원 패턴은 UI 작업에서 자주 사용되는 패턴
+- 테이블 영향도 탭의 여러 뷰 상태(목록/상세/쿼리상세)를 모두 고려해야 함
 
 ---
 

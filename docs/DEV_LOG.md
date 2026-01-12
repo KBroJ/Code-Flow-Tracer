@@ -13,7 +13,7 @@
 | [Week 2](./dev-log/WEEK2.md) | 12/18~12/22 | iBatis/MyBatis 파싱, Excel 출력 | Session 5-8 |
 | [Week 3](./dev-log/WEEK3.md) | 12/22~12/26 | GUI 구현 및 배포 | Session 9-17 |
 | [Week 4](./dev-log/WEEK4.md) | 12/30~12/31 | 세션 영속성, 기술 부채 청산 | Session 18-21 |
-| Week 5 (현재) | 01/03~ | CRUD 분석 기능, 블로그 | Session 22-27 |
+| Week 5 (현재) | 01/03~ | CRUD 분석 기능, 블로그 | Session 22-28 |
 
 ---
 
@@ -24,7 +24,7 @@ Week 1: 설계 + 기본 파서 ████████████████�
 Week 2: iBatis + 출력   ████████████████████ 100%
 Week 3: GUI + 테스트    ████████████████████ 100%
 Week 4: 세션 영속성     ████████████████████ 100%
-Week 5: CRUD 분석       ████████████████░░░░ 80%
+Week 5: CRUD 분석       █████████████████░░░ 85%
 ```
 
 ---
@@ -59,8 +59,9 @@ Week 5: CRUD 분석       ████████████████░░
 - ✅ GitHub Release v1.0.0
 
 ### 예정된 기능
-- [x] CRUD 타입별 필터링 (#22) - 완료
-- [x] 테이블 중심 분석 (#23) - 완료 (GUI 탭 제외)
+- [x] CRUD 타입별 필터링 (#22) - ✅ 완료 (PR #29)
+- [x] 테이블 중심 분석 (#23) - ✅ 완료 (CLI/Excel, PR #29)
+- [x] GUI 테이블 영향도 탭 (#30) - 🔄 진행 중 (Session 28)
 - [ ] CRUD 통계 대시보드 (#24)
 
 ---
@@ -392,7 +393,196 @@ currentResult = result;  // ← 필터링된 결과만 저장
 3. **UX 개선**: 재분석 없이 즉시 필터링 → 반응성 향상
 4. **재귀 필터링 주의**: 트리 구조 필터링 시 루트 노드 예외 처리 버그 주의
 
+**PR 생성 및 머지**
+- PR #29 생성: "feat: CRUD 타입별 필터링 및 테이블 중심 분석 구현"
+- 연결 이슈: Closes #22, Closes #23, Closes #25
+- 셀프 리뷰 후 머지 완료
+- 브랜치 삭제: `feature/22-23-25-crud-table-analysis`
+
+**신규 이슈 생성**
+- [#30](https://github.com/KBroJ/Code-Flow-Tracer/issues/30): GUI 테이블 영향도 탭 추가 (#23에서 분리)
+
 **다음 할 일**
-- [ ] GUI 테이블 영향도 탭 추가
+- [x] GUI 테이블 영향도 탭 추가 (#30) ← Session 28에서 구현
+
+---
+
+### 2026-01-12 (일) - Session 28
+
+#### Session 28: GUI 테이블 영향도 탭 구현 (#30)
+
+**문제**: #23 테이블 중심 분석이 CLI/Excel만 지원, GUI에서 테이블 역추적 불가
+**해결**: 탭 전환 시 왼쪽 패널 변경 + 브레드크럼 드릴다운 UI 구현
+
+**사용자 요구사항**
+1. 테이블 영향도 탭 선택 시 왼쪽 패널이 "테이블 목록"으로 변경
+2. 테이블 선택 시 접근 정보 표시 (CRUD/URL/XML파일/SQL ID)
+3. 테이블 더블클릭 시 해당 테이블의 모든 쿼리 표시
+4. 브레드크럼으로 현재 위치 표시 및 뒤로가기
+
+**구현 완료**
+
+1. **MainFrame.java - CardLayout 적용**
+   - `leftCardPanel` + `leftCardLayout` 추가 (엔드포인트/테이블 전환)
+   - `tableListPanel` 생성 (검색 + 테이블 리스트)
+   - 탭 전환 리스너 (`resultTabbedPane.addChangeListener`)
+   - 테이블 목록 클릭/더블클릭 이벤트 핸들러
+   - `updateTableList()`, `filterTableList()` 메서드 추가
+
+2. **TableImpactPanel.java - 완전 재구성**
+   - 기존: 왼쪽(테이블 목록) + 오른쪽(접근 정보)
+   - 변경: 가운데 영역만 담당 (왼쪽은 MainFrame에서 관리)
+   - 브레드크럼 UI: `테이블명` → `테이블명 > 쿼리`
+   - CardLayout: 접근 정보 테이블 ↔ 쿼리 상세 뷰 전환
+   - 테이블명 클릭 → 접근 정보 테이블로 돌아가기
+
+**UI 구조**
+
+```
+┌──────────────┬─────────────────────────────────────────┬──────────────┐
+│ 🔍 검색      │  TB_CUSTOMER > 쿼리                      │              │
+│ 15개 테이블  │  ┌─────────────────────────────────────┐│   설정 패널   │
+│              │  │ /* [SELECT] selectOrder */         ││              │
+│ DUAL         │  │ SELECT * FROM ORDER_TB             ││              │
+│ TB_CUSTOMER  │  │ WHERE ORDER_ID = #{orderId}        ││              │
+│ TB_DELIVERY  │  │ ─────────────────────────────────  ││              │
+│ ...          │  │ /* [INSERT] insertOrder */         ││              │
+│              │  │ INSERT INTO ORDER_TB ...           ││              │
+│              │  └─────────────────────────────────────┘│              │
+└──────────────┴─────────────────────────────────────────┴──────────────┘
+```
+
+**주요 변경 파일**
+
+| 파일 | 변경 내용 |
+|------|----------|
+| `MainFrame.java` | CardLayout, 탭 전환, 테이블 목록 관리 |
+| `TableImpactPanel.java` | 브레드크럼 + CardLayout 완전 재구성 |
+
+**배운 점**
+1. **CardLayout 활용**: 탭에 따라 왼쪽 패널 내용만 교체하는 깔끔한 패턴
+2. **일관된 UX**: 호출 흐름 탭과 동일한 3단 레이아웃 유지
+3. **브레드크럼 패턴**: 드릴다운 네비게이션의 표준 UI 패턴
+4. **이벤트 분리**: 단일 클릭(정보 표시) vs 더블클릭(상세 뷰)
+
+---
+
+#### Session 28 (계속): 세션 저장/복원 기능 및 버그 수정
+
+**사용자 피드백 및 해결**
+
+1. **"전체" 옵션 누락 및 SQL 필터 로직 오류**
+   - 문제: 테이블 목록에 "전체" 옵션이 사라짐, SQL 타입 필터 전체 해제 시 모든 결과 표시
+   - 해결: `ALL_TABLES` 상수 추가, 빈 필터 → 빈 결과 반환 로직 수정
+
+2. **세션 저장/복원 미동작**
+   - 문제: 앱 종료 시 탭/테이블 선택 상태가 저장되지 않음
+   - 원인: `saveSession()`이 분석 완료 후에만 호출됨
+   - 해결: `windowClosing` 이벤트에서 `saveSession()` 호출 추가
+
+3. **호출흐름 탭 엔드포인트 선택 복원 안 됨**
+   - 문제: 엔드포인트 선택은 되지만 상세화면 스크롤이 안 됨
+   - 원인: UI 렌더링 완료 전 `scrollToEndpoint()` 호출
+   - 해결: `SwingUtilities.invokeLater()` 중첩으로 렌더링 후 스크롤
+
+4. **테이블 영향도 특정 쿼리 복원 안 됨**
+   - 문제: 더블클릭한 특정 쿼리가 아닌 전체 쿼리 목록으로 복원
+   - 해결: `selectedQueryRowIndex` 필드 추가, `restoreQueryView()` 메서드 구현
+
+5. **테이블 "전체" 선택 시 상세화면 빈 화면**
+   - 문제: 분석 후 테이블 영향도 탭에서 "전체" 선택되어 있지만 상세화면 비어있음
+   - 원인: `updateTableList()`가 `tableImpactPanel.updateData()` 보다 먼저 호출됨
+   - 해결: 호출 순서 변경 - `updateData()` 먼저, `updateTableList()` 나중에
+
+**구현 상세 - 세션 저장/복원**
+
+| 필드 | 설명 | 저장 시점 |
+|------|------|----------|
+| `selectedTabIndex` | 선택된 탭 (0: 호출흐름, 1: 테이블영향도) | 앱 종료 시 |
+| `selectedEndpoint` | 호출흐름 탭에서 선택한 엔드포인트 URL | 앱 종료 시 |
+| `selectedTable` | 테이블 영향도 탭에서 선택한 테이블명 | 앱 종료 시 |
+| `tableDetailViewActive` | 쿼리 상세 화면 활성화 여부 | 앱 종료 시 |
+| `selectedQueryRowIndex` | 선택한 쿼리 행 인덱스 (-1: 전체) | 앱 종료 시 |
+
+**변경 파일**
+
+| 파일 | 변경 내용 |
+|------|----------|
+| `SessionData.java` | 5개 필드 추가 (selectedTabIndex, selectedEndpoint, selectedTable, tableDetailViewActive, selectedQueryRowIndex) |
+| `SessionManager.java` | saveSession() 오버로드 확장 |
+| `TableImpactPanel.java` | isQueryDetailViewActive(), getSelectedQueryRowIndex(), restoreQueryView() 메서드 추가 |
+| `MainFrame.java` | windowClosing에서 saveSession() 호출, 호출 순서 수정 (updateData → updateTableList) |
+
+**배운 점**
+1. **Swing 렌더링 타이밍**: UI 조작은 렌더링 완료 후 실행해야 함 (invokeLater 중첩)
+2. **메서드 호출 순서**: 데이터 설정 → UI 업데이트 순서가 중요
+3. **세션 저장 시점**: 분석 완료 후뿐 아니라 앱 종료 시에도 저장 필요
+4. **상태 추적**: 복원할 모든 UI 상태를 명시적으로 필드로 관리
+
+---
+
+#### Session 28 (계속): GUI 테이블 영향도 UX 개선 및 신규 기능 5종 구현
+
+**사용자 피드백 기반 신규 기능 요청**
+
+테스트 과정에서 5가지 추가 기능 요청:
+1. 상세화면 실시간 검색
+2. 분석요약 탭별 동적 변경 (CRUD 통계)
+3. URL 필터 탭별 표시/숨김
+4. 마우스 뒤로가기 버튼 지원
+5. SQL 필터 시 상태 유지
+
+**구현 완료 내역**
+
+| 기능 | 구현 위치 | 내용 |
+|------|----------|------|
+| SQL 필터 상태 유지 | MainFrame.java:1440-1510 | `applyFiltersAndRefresh()` 수정, 테이블/쿼리 선택 상태 저장 후 복원 |
+| 분석요약 동적 변경 | MainFrame.java:462-551 | CardLayout으로 클래스 통계 ↔ CRUD 통계 전환 |
+| URL 필터 숨김 | MainFrame.java:602-617 | `urlFilterPanel`로 분리, 테이블 영향도 탭에서 숨김 |
+| 마우스 뒤로가기 | TableImpactPanel.java:230-247 | 버튼 4 (XBUTTON1) 리스너, 쿼리 상세에서 뒤로가기 |
+| 상세화면 검색 | TableImpactPanel.java:92-95, 159-166, 260-271 | `accessSearchField` + `RowFilter` 실시간 필터링 |
+
+**기술적 결정**
+
+1. **SQL 필터 상태 유지**
+   - 문제: `applyFiltersAndRefresh()`가 `updateTableList()`를 호출하면서 "전체"로 초기화
+   - 해결: 현재 탭이 테이블 영향도인 경우 상태 저장 후 복원
+   - 새 메서드: `updateTableListWithoutSelection()` - 기본 선택 없이 목록만 업데이트
+
+2. **분석요약 CardLayout**
+   - 호출 흐름 탭: 클래스/Controller/Service/DAO/URL 통계
+   - 테이블 영향도 탭: 테이블 수/SELECT/INSERT/UPDATE/DELETE 통계
+   - CRUD 색상 구분: SELECT(청록), INSERT(파랑), UPDATE(노랑), DELETE(빨강)
+
+3. **마우스 확장 버튼**
+   - Java MouseEvent에서 확장 버튼은 정수값으로 표현
+   - 버튼 4 = XBUTTON1 (뒤로가기), 버튼 5 = XBUTTON2 (앞으로가기)
+   - `MouseEvent.BUTTON4` 상수가 없어서 `e.getButton() == 4`로 처리
+
+4. **상세화면 검색**
+   - `TableRowSorter`의 `RowFilter.regexFilter()` 활용
+   - 대소문자 무시 (`(?i)` 플래그)
+   - 모든 컬럼에서 검색 (CRUD, URL, XML 파일, SQL ID)
+
+**추가 개선: CRUD 표시 제거**
+
+- 문제: 분석요약에 CRUD 통계가 있으니 상세화면 오른쪽 상단의 `S:X I:X U:X D:X` 표시 중복
+- 해결: `crudStatsLabel` 관련 코드 전체 제거
+- 브레드크럼 패널 구조 단순화 (BorderLayout → FlowLayout)
+
+**변경 파일**
+
+| 파일 | 변경 내용 |
+|------|----------|
+| `MainFrame.java` | CardLayout(summaryCardPanel), URL 필터 패널 분리, SQL 필터 상태 유지, CRUD 통계 계산 |
+| `TableImpactPanel.java` | 검색 필드 추가, 마우스 뒤로가기 리스너, crudStatsLabel 제거 |
+
+**배운 점**
+1. **CardLayout 활용**: 탭별로 다른 UI를 보여주는 표준 패턴
+2. **RowFilter**: Swing JTable 실시간 필터링의 표준 방법
+3. **마우스 확장 버튼**: Java에서 정수값으로 처리 (상수 없음)
+4. **UI 중복 제거**: 같은 정보를 여러 곳에 표시하면 UX 혼란
+
+**다음 할 일**
 - [ ] CRUD 통계 대시보드 (#24)
 - [ ] 러너스하이 마무리 회고 글 작성

@@ -198,12 +198,27 @@ public class SessionManager {
      * 기존 설정(recentPaths, endpointFilter)은 유지
      */
     public boolean saveSession(String projectPath, FlowResult result, String urlFilter, String outputStyle) {
+        return saveSession(projectPath, result, urlFilter, outputStyle, 0, null, null, false, -1);
+    }
+
+    /**
+     * 세션 저장 (탭 인덱스 및 테이블 선택 포함)
+     * 기존 설정(recentPaths, endpointFilter)은 유지
+     */
+    public boolean saveSession(String projectPath, FlowResult result, String urlFilter, String outputStyle,
+                               int selectedTabIndex, String selectedEndpoint,
+                               String selectedTable, boolean tableDetailViewActive, int selectedQueryRowIndex) {
         // 기존 설정 로드 (recentPaths, endpointFilter 유지를 위해)
         SessionData existing = loadSettings();
 
         SessionData data = new SessionData(projectPath, result);
         data.setUrlFilter(urlFilter);
         data.setOutputStyle(outputStyle);
+        data.setSelectedTabIndex(selectedTabIndex);
+        data.setSelectedEndpoint(selectedEndpoint);
+        data.setSelectedTable(selectedTable);
+        data.setTableDetailViewActive(tableDetailViewActive);
+        data.setSelectedQueryRowIndex(selectedQueryRowIndex);
 
         // 기존 설정 유지
         if (existing != null) {
