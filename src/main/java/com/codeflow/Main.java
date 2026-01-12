@@ -24,6 +24,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
@@ -73,6 +74,15 @@ public class Main implements Callable<Integer> {
 
     @Option(names = {"--excel"}, description = "엑셀 파일로 저장 (기본 경로: output/code-flow-result.xlsx)")
     private boolean excelOutput;
+
+    @Option(names = {"--sql-type"}, description = "SQL 타입 필터 (콤마 구분: SELECT,INSERT,UPDATE,DELETE)", split = ",")
+    private List<String> sqlTypeFilter;
+
+    @Option(names = {"--table"}, description = "특정 테이블에 접근하는 흐름만 표시")
+    private String tableFilter;
+
+    @Option(names = {"--list-tables"}, description = "테이블 목록 및 영향도 분석 결과 출력")
+    private boolean listTables;
 
     public static void main(String[] args) {
         // GUI 모드 체크 (--gui 옵션이 있으면 GUI 실행 후 System.exit 호출 안 함)
@@ -184,6 +194,16 @@ public class Main implements Callable<Integer> {
             result = analyzer.analyze(projectPath, parsedClasses);
         }
 
+        // SQL 타입(CRUD) 필터링
+        if (sqlTypeFilter != null && !sqlTypeFilter.isEmpty()) {
+            result = analyzer.filterBySqlType(result, sqlTypeFilter);
+        }
+
+        // 테이블 필터링
+        if (tableFilter != null && !tableFilter.isEmpty()) {
+            result = analyzer.filterByTable(result, tableFilter);
+        }
+
         return result;
     }
 
@@ -191,6 +211,12 @@ public class Main implements Callable<Integer> {
      * 분석 결과 출력
      */
     private void outputResult(FlowResult result) throws IOException {
+        // --list-tables 옵션: 테이블 영향도 분석 결과 출력
+        if (listTables) {
+            outputTableImpact(result);
+            return;  // 테이블 목록만 출력하고 종료
+        }
+
         // 출력 스타일 결정
         OutputStyle outputStyle = parseOutputStyle(style);
 
@@ -297,6 +323,65 @@ public class Main implements Callable<Integer> {
             }
             counter++;
         }
+    }
+
+    /**
+     * 테이블 영향도 분석 결과 출력 (--list-tables)
+     */
+    private void outputTableImpact(FlowResult result) {
+        FlowAnalyzer analyzer = new FlowAnalyzer();
+        Map<String, FlowAnalyzer.TableImpact> tableIndex = analyzer.buildTableIndex(result);
+
+        if (tableIndex.isEmpty()) {
+            System.out.println("테이블 접근 정보가 없습니다.");
+            return;
+        }
+
+        // 테이블 이름순 정렬
+        List<String> sortedTables = new ArrayList<>(tableIndex.keySet());
+        java.util.Collections.sort(sortedTables);
+
+        System.out.println();
+        System.out.println("=== 테이블 영향도 분석 ===");
+        System.out.println(String.format("총 %d개 테이블 발견", sortedTables.size()));
+        System.out.println();
+
+        for (String tableName : sortedTables) {
+            FlowAnalyzer.TableImpact impact = tableIndex.get(tableName);
+            Map<SqlInfo.SqlType, Long> crudCounts = impact.getCrudCounts();
+
+            // 테이블명 + CRUD 통계
+            StringBuilder stats = new StringBuilder();
+            stats.append(String.format("📋 %s (%d건)", tableName, impact.getAccessCount()));
+            if (!crudCounts.isEmpty()) {
+                stats.append(" - ");
+                List<String> parts = new ArrayList<>();
+                if (crudCounts.containsKey(SqlInfo.SqlType.SELECT))
+                    parts.add("S:" + crudCounts.get(SqlInfo.SqlType.SELECT));
+                if (crudCounts.containsKey(SqlInfo.SqlType.INSERT))
+                    parts.add("I:" + crudCounts.get(SqlInfo.SqlType.INSERT));
+                if (crudCounts.containsKey(SqlInfo.SqlType.UPDATE))
+                    parts.add("U:" + crudCounts.get(SqlInfo.SqlType.UPDATE));
+                if (crudCounts.containsKey(SqlInfo.SqlType.DELETE))
+                    parts.add("D:" + crudCounts.get(SqlInfo.SqlType.DELETE));
+                stats.append(String.join(", ", parts));
+            }
+            System.out.println(stats);
+
+            // 접근 상세 정보 (상세 모드일 때만)
+            if ("detailed".equalsIgnoreCase(style)) {
+                for (FlowAnalyzer.TableAccess access : impact.getAccesses()) {
+                    System.out.println(String.format("   └─ [%s] %s %s → %s.%s()",
+                        access.getSqlType(),
+                        access.getHttpMethod() != null ? access.getHttpMethod() : "-",
+                        access.getUrl() != null ? access.getUrl() : "-",
+                        access.getClassName(),
+                        access.getMethodName()));
+                }
+            }
+        }
+
+        System.out.println();
     }
 
     /**

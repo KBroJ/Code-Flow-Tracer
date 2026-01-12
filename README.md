@@ -73,9 +73,10 @@ java -jar code-flow-tracer.jar -p /path/to/project -s detailed
 | **세션 복원** | 앱 재시작 시 마지막 분석 결과 자동 복원 |
 | **최근 경로 기억** | 최근 사용한 프로젝트 경로 10개 저장 |
 | **URL 필터** | 특정 URL 패턴만 분석 (예: `/api/user/*`) |
+| **CRUD 실시간 필터** | SELECT/INSERT/UPDATE/DELETE 체크박스로 즉시 필터링 |
 | **출력 스타일** | Compact, Normal, Detailed 선택 |
 | **결과 보기** | 콘솔 스타일 트리 출력, 텍스트 드래그 선택 가능 |
-| **엑셀 저장** | 분석 결과를 엑셀 파일로 저장 |
+| **엑셀 저장** | 분석 결과를 엑셀 파일로 저장 (테이블 영향도 시트 포함) |
 | **폰트 크기 조절** | Ctrl + 마우스 휠로 9px~24px 조절 |
 | **패널 리사이즈** | 좌측 설정 패널 드래그로 크기 조절 |
 
@@ -86,7 +87,19 @@ java -jar code-flow-tracer.jar -p /path/to/project -s detailed
 ![Excel Output](assets/excel-output.png)
 
 > 분석 결과를 엑셀 파일로 내보내 문서화하거나 인수인계 자료로 활용할 수 있습니다.
-> **호출 흐름** 시트와 **SQL 목록** 시트로 구성됩니다.
+> **호출 흐름**, **SQL 목록**, **테이블 영향도** 시트로 구성됩니다.
+
+<details>
+<summary>엑셀 시트 구성 보기</summary>
+
+| 시트 | 내용 |
+|------|------|
+| **요약** | 분석 일시, 프로젝트 경로, 클래스/URL 수 통계 |
+| **호출 흐름** | URL별 Controller → Service → DAO → SQL 흐름, CRUD 타입 |
+| **SQL 목록** | SQL ID, 테이블, 파라미터, 쿼리 원문 |
+| **테이블 영향도** | 테이블별 접근 횟수, CRUD 통계, 접근 URL 목록 |
+
+</details>
 
 ---
 
@@ -97,9 +110,11 @@ java -jar code-flow-tracer.jar -p /path/to/project -s detailed
 | **호출 흐름 추적** | Controller → Service → DAO → SQL | ✅ 완료 |
 | **iBatis/MyBatis 파싱** | XML SQL 매퍼에서 쿼리 추출 | ✅ 완료 |
 | **콘솔 출력** | 트리 형태 + ANSI 색상 지원 | ✅ 완료 |
-| **엑셀 출력** | 호출 흐름 + SQL 목록 시트 | ✅ 완료 |
+| **엑셀 출력** | 호출 흐름 + SQL 목록 + 테이블 영향도 시트 | ✅ 완료 |
 | **Desktop GUI** | Swing 기반, FlatLaf 다크 테마 | ✅ 완료 |
 | **세션 영속성** | 앱 재시작 시 마지막 분석 결과 복원 | ✅ 완료 |
+| **CRUD 타입 필터링** | SELECT/INSERT/UPDATE/DELETE 실시간 필터 | ✅ 완료 |
+| **테이블 중심 분석** | 테이블별 접근 URL/CRUD 역추적 | ✅ 완료 |
 | **Windows 설치 파일** | JRE 번들 포함, Java 설치 불필요 | ✅ 완료 |
 | **전자정부프레임워크** | 레거시 SI 환경 특화 지원 | ✅ 지원 |
 
@@ -140,6 +155,15 @@ java -jar build/libs/code-flow-tracer.jar -p /path/to/project -s detailed
 
 # 엑셀로 출력
 java -jar build/libs/code-flow-tracer.jar -p /path/to/project --excel -o result.xlsx
+
+# SELECT 쿼리만 필터링
+java -jar build/libs/code-flow-tracer.jar -p /path/to/project --sql-type SELECT
+
+# 테이블 목록 및 영향도 분석
+java -jar build/libs/code-flow-tracer.jar -p /path/to/project --list-tables
+
+# 특정 테이블 접근 흐름만 분석
+java -jar build/libs/code-flow-tracer.jar -p /path/to/project --table TB_USER
 ```
 
 <details>
@@ -154,6 +178,9 @@ java -jar build/libs/code-flow-tracer.jar -p /path/to/project --excel -o result.
 | `-d, --output-dir` | 엑셀 저장 디렉토리 (기본: output) |
 | `--excel` | 엑셀 파일로 출력 |
 | `--no-color` | 색상 출력 비활성화 |
+| `--sql-type` | SQL 타입 필터 (예: `SELECT,INSERT`) |
+| `--table` | 특정 테이블 접근 흐름만 표시 |
+| `--list-tables` | 테이블 목록 및 영향도 분석 출력 |
 
 </details>
 

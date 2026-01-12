@@ -1,6 +1,6 @@
 # 할 일 목록 (TODO)
 
-> 최종 수정일: 2026-01-07
+> 최종 수정일: 2026-01-12 (Session 27)
 
 ## 진행 상태 범례
 - ✅ 완료
@@ -213,19 +213,19 @@
 - [x] 기존 사용자 설정 마이그레이션 테스트
 - [x] GUI 삭제 메뉴 통합 ("설정 초기화" + "세션 삭제" → 단일 메뉴)
 
-**CRUD 타입별 필터링 ([#22](https://github.com/KBroJ/Code-Flow-Tracer/issues/22))** ⏳
+**CRUD 타입별 필터링 ([#22](https://github.com/KBroJ/Code-Flow-Tracer/issues/22))** ✅
 > 피드백: 법원도서관 프로젝트 AS-IS 분석 시 CRUD 타입별 필터 필요
-- [ ] CLI `--sql-type` 옵션 추가 (콤마 구분 다중 선택)
-- [ ] GUI 체크박스 다중 선택 UI
-- [ ] 엑셀 CRUD 타입 컬럼 추가
-- [ ] 세션에 필터 상태 저장
+- [x] CLI `--sql-type` 옵션 추가 (콤마 구분 다중 선택)
+- [x] GUI 체크박스 다중 선택 UI
+- [x] 엑셀 CRUD 타입 컬럼 추가
+- [x] 세션에 필터 상태 저장
 
-**테이블 중심 분석 ([#23](https://github.com/KBroJ/Code-Flow-Tracer/issues/23))** ⏳
+**테이블 중심 분석 ([#23](https://github.com/KBroJ/Code-Flow-Tracer/issues/23))** ✅
 > 피드백: 테이블 스키마 변경 시 영향 범위 파악 필요
-- [ ] 테이블 → 접근 코드 역방향 인덱싱
-- [ ] GUI 테이블 영향도 탭 추가
-- [ ] CLI `--table`, `--list-tables` 옵션
-- [ ] 엑셀 테이블 영향도 시트 추가
+- [x] 테이블 → 접근 코드 역방향 인덱싱
+- [ ] GUI 테이블 영향도 탭 추가 (향후 확장)
+- [x] CLI `--table`, `--list-tables` 옵션
+- [x] 엑셀 테이블 영향도 시트 추가
 
 **CRUD 통계 대시보드 ([#24](https://github.com/KBroJ/Code-Flow-Tracer/issues/24))** ⏳
 > 피드백: 프로젝트 전체 CRUD 분포 및 모듈별 역할 파악 필요
@@ -256,7 +256,7 @@
 - [x] 기술3: DAO에서 SQL까지, XML 파싱 ([#57](https://kbroj9210.tistory.com/57))
 - [x] 기술4: 정적 분석의 한계 - 해결할 수 없는 것들 ([#58](https://kbroj9210.tistory.com/58))
 - [x] 기술5: CLI 출력 구현기 ([#59](https://kbroj9210.tistory.com/59)) (선택)
-- [ ] 기술6: Excel 출력 - Apache POI (선택)
+- [x] 기술6: Excel 출력 - Apache POI (선택)
 - [ ] 기술7: Swing으로 모던한 GUI 만들기 (선택)
 - [ ] 기술8: jpackage로 배포하기 (선택)
 - [ ] 기술9: Gson으로 세션 영속성 구현하기 (선택)
@@ -336,6 +336,7 @@
 | #21 | GUI UX 일관성 문제 (커서 표시, 필터 저장, 초기화 불완전) | ✅ 해결 | 2025-12-31 |
 | #23 | URL 필터 적용 시 분석 요약 통계 미반영 (FlowBased 메서드 추가) | ✅ 해결 | 2025-12-31 |
 | #24 | 설치 삭제 시 세션 데이터 유지됨 (WiX RemoveFile 와일드카드) | ✅ 해결 | 2025-12-31 |
+| #25 | GUI CRUD 필터 실시간 적용 불가 + 필터링 버그 | ✅ 해결 | 2026-01-12 |
 
 ---
 
