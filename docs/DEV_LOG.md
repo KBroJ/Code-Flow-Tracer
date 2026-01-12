@@ -13,7 +13,7 @@
 | [Week 2](./dev-log/WEEK2.md) | 12/18~12/22 | iBatis/MyBatis 파싱, Excel 출력 | Session 5-8 |
 | [Week 3](./dev-log/WEEK3.md) | 12/22~12/26 | GUI 구현 및 배포 | Session 9-17 |
 | [Week 4](./dev-log/WEEK4.md) | 12/30~12/31 | 세션 영속성, 기술 부채 청산 | Session 18-21 |
-| Week 5 (현재) | 01/03~ | CRUD 분석 기능, 블로그 | Session 22-28 |
+| Week 5 (현재) | 01/03~ | CRUD 분석 기능, 블로그 | Session 22-29 |
 
 ---
 
@@ -61,7 +61,7 @@ Week 5: CRUD 분석       █████████████████░
 ### 예정된 기능
 - [x] CRUD 타입별 필터링 (#22) - ✅ 완료 (PR #29)
 - [x] 테이블 중심 분석 (#23) - ✅ 완료 (CLI/Excel, PR #29)
-- [x] GUI 테이블 영향도 탭 (#30) - 🔄 진행 중 (Session 28)
+- [x] GUI 테이블 영향도 탭 (#30) - ✅ 완료 (Session 29)
 - [ ] CRUD 통계 대시보드 (#24)
 
 ---
@@ -274,17 +274,79 @@ Week 5: CRUD 분석       █████████████████░
 - 역방향 인덱싱(`Map<테이블명, List<접근정보>>`) 구축 필요
 - GitHub 이슈 #23에 실무 피드백 코멘트 추가 완료
 
+---
+
+### 2026-01-11 (토) ~ 2026-01-12 (일) - Session 26
+
+#### Session 26: 기술 블로그 7편 작성 및 발행 (Swing으로 모던한 GUI 만들기)
+
+**문제**: 기술 블로그 시리즈에서 GUI 구현 관련 글이 부족
+**해결**: FlatLaf, SwingWorker, JEditorPane 활용법 초안 작성 및 티스토리 발행
+
+**오늘 한 일**
+1. **기술7 GUI 블로그 초안 작성** (`docs/blog/초안/08-Swing으로모던한GUI만들기.md`)
+   - 제목: "Swing으로 모던한 GUI 만들기 - CLI를 넘어서"
+   - 핵심: FlatLaf 한 줄로 다크 테마, SwingWorker로 UI 블로킹 방지
+
+2. **기술 선택 근거 정리**
+   - JavaFX vs Swing vs Electron 비교표
+   - Swing 선택 이유: JDK 내장, jpackage 호환, 폐쇄망 친화적
+
+3. **핵심 구현 내용 정리**
+   - FlatLaf 다크 테마 적용 (`FlatDarculaLaf.setup()`)
+   - SwingWorker로 백그라운드 분석 (doInBackground, publish, process, done)
+   - JEditorPane + HTML로 색상 + 텍스트 선택 지원
+   - JSplitPane으로 리사이즈 가능한 패널
+
+4. **트러블슈팅 모음 정리**
+   - Issue #009: JTree 한글 깨짐 → 맑은 고딕 폰트
+   - Issue #010: 텍스트 선택 불가 → JEditorPane
+   - Issue #011: 창 닫아도 프로세스 안 종료 → WindowListener
+   - Issue #012: HTML 박스 문자 정렬 불일치 → `<table>` + CSS
+   - Issue #013: JSplitPane 패널 안 보임 → setDividerLocation()
+   - Issue #014: 분석 요약 정렬 어색 → Leader dots
+
+5. **Ctrl+휠 폰트 크기 조절 기능 설명 추가**
+   - e.consume()으로 스크롤 이벤트 차단 중요성
+
+6. **기존 블로그 스타일 일관성 검토 및 수정**
+   - 문체 통일: "~습니다" → "~다" 체로 전체 수정
+   - 들어가며: 이전 글 링크 추가, 비유("리모컨") 추가
+   - SwingWorker: 식당 비유(홀 직원/주방 직원) 추가
+   - 마치며: 삽질 포인트, 성장한 점, 다음 글 예고 추가
+
+7. **티스토리 발행 완료**: [#61](https://kbroj9210.tistory.com/61)
+   - PC/모바일 렌더링 확인
+   - 표, 코드 블록 정상 표시 확인
+
+**블로그 구조 (8개 섹션)**
+| 섹션 | 내용 |
+|------|------|
+| 1. 들어가며 | 왜 GUI? 기술 선택 근거 |
+| 2. FlatLaf | 한 줄로 모던 UI |
+| 3. SwingWorker | UI 블로킹 방지 |
+| 4. JEditorPane + HTML | 색상 + 텍스트 선택 |
+| 5. JSplitPane | 리사이즈 가능한 패널 |
+| 6. 트러블슈팅 모음 | Issues #009-#014 |
+| 7. Ctrl+휠 폰트 조절 | 사용자 편의 기능 |
+| 8. 마치며 | 핵심 정리, 회고 |
+
+**배운 점**
+1. **Swing의 재발견**: FlatLaf로 촌스러운 UI 문제 해결 가능
+2. **EDT 스레드 모델**: SwingWorker의 각 메서드가 어느 스레드에서 실행되는지 이해
+3. **문서화의 중요성**: JSplitPane visibility 이슈는 공식 문서 확인으로 해결
+
 **다음 할 일**
 - [x] CRUD 필터링 기능 구현 (#22)
 - [x] 테이블 중심 분석 기능 구현 (#23) ← 실무 피드백 반영
 - [ ] 러너스하이 마무리 회고 글 작성
-- [ ] (선택) 기술7 Swing GUI 블로그
+- [x] ~~기술7 GUI 블로그 티스토리 발행~~ → #61 발행 완료
 
 ---
 
-### 2026-01-12 (일) - Session 26
+### 2026-01-12 (일) - Session 27
 
-#### Session 26: CRUD 필터링 (#22) 및 테이블 중심 분석 (#23) 구현
+#### Session 27: CRUD 필터링 (#22) 및 테이블 중심 분석 (#23) 구현
 
 **문제**: 실무에서 CRUD 타입별 필터링 및 테이블 역추적 기능 필요
 **해결**: #22, #23 이슈 기능 구현 완료
@@ -333,9 +395,9 @@ Week 5: CRUD 분석       █████████████████░
 
 ---
 
-### 2026-01-12 (일) - Session 27
+### 2026-01-12 (일) - Session 28
 
-#### Session 27: CRUD 필터 실시간 적용 구현
+#### Session 28: CRUD 필터 실시간 적용 구현
 
 **문제**: GUI에서 CRUD 체크박스 변경 시 재분석 필요 (Issue #025)
 **해결**: 원본 데이터 저장 + UI 레이어 필터링으로 실시간 반영
@@ -403,13 +465,13 @@ currentResult = result;  // ← 필터링된 결과만 저장
 - [#30](https://github.com/KBroJ/Code-Flow-Tracer/issues/30): GUI 테이블 영향도 탭 추가 (#23에서 분리)
 
 **다음 할 일**
-- [x] GUI 테이블 영향도 탭 추가 (#30) ← Session 28에서 구현
+- [x] GUI 테이블 영향도 탭 추가 (#30) ← Session 29에서 구현
 
 ---
 
-### 2026-01-12 (일) - Session 28
+### 2026-01-12 (일) - Session 29
 
-#### Session 28: GUI 테이블 영향도 탭 구현 (#30)
+#### Session 29: GUI 테이블 영향도 탭 구현 (#30)
 
 **문제**: #23 테이블 중심 분석이 CLI/Excel만 지원, GUI에서 테이블 역추적 불가
 **해결**: 탭 전환 시 왼쪽 패널 변경 + 브레드크럼 드릴다운 UI 구현
@@ -467,7 +529,7 @@ currentResult = result;  // ← 필터링된 결과만 저장
 
 ---
 
-#### Session 28 (계속): 세션 저장/복원 기능 및 버그 수정
+#### Session 29 (계속): 세션 저장/복원 기능 및 버그 수정
 
 **사용자 피드백 및 해결**
 
@@ -521,7 +583,7 @@ currentResult = result;  // ← 필터링된 결과만 저장
 
 ---
 
-#### Session 28 (계속): GUI 테이블 영향도 UX 개선 및 신규 기능 5종 구현
+#### Session 29 (계속): GUI 테이블 영향도 UX 개선 및 신규 기능 5종 구현
 
 **사용자 피드백 기반 신규 기능 요청**
 
@@ -586,3 +648,4 @@ currentResult = result;  // ← 필터링된 결과만 저장
 **다음 할 일**
 - [ ] CRUD 통계 대시보드 (#24)
 - [ ] 러너스하이 마무리 회고 글 작성
+- [ ] 기술8 jpackage 블로그 초안 작성
