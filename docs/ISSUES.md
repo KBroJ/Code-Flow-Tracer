@@ -2282,6 +2282,132 @@ if (savedQueryDetailActive && savedQueryRowIndex >= 0) {
 
 ---
 
+### Issue #030: Git Stash 충돌 - 병렬 작업으로 인한 세션 번호 중복
+
+**발생일**: 2026-01-12
+**상태**: ✅ 해결
+
+#### 문제 상황
+다른 환경에서 작업 후 `git pull`을 시도했으나, 로컬에 stash된 변경사항과 원격의 변경사항이 **같은 파일(DEV_LOG.md)의 같은 위치**를 수정하여 충돌 발생.
+
+```bash
+$ git stash pop
+Auto-merging docs/DEV_LOG.md
+CONFLICT (content): Merge conflict in docs/DEV_LOG.md
+```
+
+**충돌 원인**: 두 곳에서 동시에 작업 진행
+| 작업 위치 | 작업 내용 | Session 번호 |
+|-----------|----------|-------------|
+| 이전 세션 (Stash) | 기술7 GUI 블로그 작성 | Session 26 |
+| 다른 환경 (Remote) | CRUD 구현, 실시간 필터, 테이블 영향도 | Session 26, 27, 28 |
+
+**결과**: 서로 다른 작업이 같은 Session 26 번호를 사용
+
+#### 충돌 지점 3곳
+
+**1. Week 5 세션 범위 (Line 16)**
+```markdown
+<<<<<<< Updated upstream
+| Week 5 (현재) | 01/03~ | CRUD 분석 기능, 블로그 | Session 22-28 |
+=======
+| Week 5 (현재) | 01/03~ | CRUD 분석 기능, 블로그 | Session 22-26 |
+>>>>>>> Stashed changes
+```
+
+**2. 진행률 (Line 27)**
+```markdown
+<<<<<<< Updated upstream
+Week 5: CRUD 분석       █████████████████░░░ 85%
+=======
+Week 5: CRUD 분석       ██████░░░░░░░░░░░░░░ 30%
+>>>>>>> Stashed changes
+```
+
+**3. Session 25 "다음 할 일" 이후 (Line 347~)**
+- Stash: Session 26으로 블로그 작성 기록 추가
+- Remote: Session 26으로 CRUD 구현 기록 추가
+- 두 작업이 같은 Session 번호를 사용하여 내용 충돌
+
+#### 해결 과정
+
+**Step 1: 충돌 마커 확인**
+```bash
+$ grep -n "<<<<<<\|======\|>>>>>>" docs/DEV_LOG.md
+16:<<<<<<< Updated upstream
+18:=======
+20:>>>>>>> Stashed changes
+...
+```
+
+**Step 2: 세션 번호 재정렬 전략 수립**
+- 블로그 작업(01-11~12)이 CRUD 작업(01-12)보다 먼저 시작됨
+- 시간순으로 정렬: 블로그 → CRUD 구현 → 실시간 필터 → 테이블 영향도
+
+| 기존 | 변경 후 | 내용 |
+|------|---------|------|
+| Stash Session 26 | **Session 26** | 기술7 GUI 블로그 |
+| Remote Session 26 | **Session 27** | CRUD 필터링 구현 |
+| Remote Session 27 | **Session 28** | CRUD 필터 실시간 적용 |
+| Remote Session 28 | **Session 29** | GUI 테이블 영향도 탭 |
+
+**Step 3: 수동 병합 수행**
+```bash
+# 1. 헤더 수정: Session 22-29로 통합
+| Week 5 (현재) | 01/03~ | CRUD 분석 기능, 블로그 | Session 22-29 |
+
+# 2. 진행률: 최신값(85%) 유지
+Week 5: CRUD 분석       █████████████████░░░ 85%
+
+# 3. 세션 번호 재정렬
+Session 26 → 블로그 (stash 내용 유지)
+Session 26 → Session 27 (remote)
+Session 27 → Session 28 (remote)
+Session 28 → Session 29 (remote)
+```
+
+**Step 4: 충돌 해결 후 커밋**
+```bash
+$ git add docs/DEV_LOG.md
+$ git commit -m "docs: Session 26 블로그 작성 기록 추가 및 세션 번호 재정렬"
+$ git stash drop  # 사용한 stash 정리
+$ git push
+```
+
+#### 최종 결과
+```
+Session 26 (01/11~12) → 기술7 GUI 블로그 작성 및 발행
+Session 27 (01/12)    → CRUD 필터링 (#22) 및 테이블 중심 분석 (#23)
+Session 28 (01/12)    → CRUD 필터 실시간 적용 (#25)
+Session 29 (01/12)    → GUI 테이블 영향도 탭 (#30) + UX 개선
+```
+
+#### 배운 점
+
+1. **Stash 사용 시 주의점**
+   - `git stash`는 임시 저장소지만, 오래 방치하면 원격과 충돌 가능성 증가
+   - 가능하면 stash보다 브랜치를 사용하는 것이 충돌 관리에 유리
+
+2. **병렬 작업 시 세션 번호 관리**
+   - 여러 환경에서 작업 시 세션 번호가 중복될 수 있음
+   - 날짜/시간 기반으로 세션 순서를 재정렬하는 기준 필요
+
+3. **충돌 해결 전략**
+   - `<<<<<<< Updated upstream`: 원격(pull 받은 내용)
+   - `>>>>>>> Stashed changes`: 로컬(stash 내용)
+   - 둘 다 유효한 내용이면 **병합**, 하나만 필요하면 **선택**
+
+4. **문서 충돌의 특성**
+   - 코드 충돌과 달리 문서 충돌은 "둘 다 맞는 내용"인 경우가 많음
+   - 시간순/논리순으로 재정렬하여 병합하는 것이 일반적
+
+5. **예방책**
+   - 작업 시작 전 `git pull` 습관화
+   - 장시간 작업 시 중간중간 push하여 원격과 동기화
+   - DEV_LOG.md처럼 자주 수정되는 파일은 작업 단위를 작게 유지
+
+---
+
 ## 참고 자료
 
 - [JavaParser 공식 문서](https://javaparser.org/)
