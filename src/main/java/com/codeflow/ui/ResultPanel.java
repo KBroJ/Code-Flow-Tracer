@@ -28,7 +28,6 @@ public class ResultPanel extends JPanel {
     private static final String COLOR_CONTROLLER = "#4EC9B0";  // 청록 (밝음)
     private static final String COLOR_SERVICE = "#569CD6";     // 파랑 (밝음)
     private static final String COLOR_DAO = "#C586C0";         // 보라 (밝음)
-    private static final String COLOR_SQL = "#CE9178";         // 주황 (밝음)
     private static final String COLOR_WARNING = "#F44747";     // 빨강 (밝음)
     private static final String COLOR_INTERFACE = "#9CDCFE";   // 연한 파랑
     private static final String COLOR_SUMMARY = "#CCCCCC";     // 밝은 회색

@@ -606,15 +606,20 @@ public class FlowAnalyzer {
         private final String methodName;    // DAO 메서드명
         private final SqlInfo.SqlType sqlType;  // CRUD 타입
         private final String sqlId;         // SQL ID
+        private final String xmlFileName;   // XML 파일명
+        private final String query;         // SQL 쿼리
 
         public TableAccess(String url, String httpMethod, String className,
-                          String methodName, SqlInfo.SqlType sqlType, String sqlId) {
+                          String methodName, SqlInfo.SqlType sqlType, String sqlId,
+                          String xmlFileName, String query) {
             this.url = url;
             this.httpMethod = httpMethod;
             this.className = className;
             this.methodName = methodName;
             this.sqlType = sqlType;
             this.sqlId = sqlId;
+            this.xmlFileName = xmlFileName;
+            this.query = query;
         }
 
         public String getUrl() { return url; }
@@ -623,6 +628,8 @@ public class FlowAnalyzer {
         public String getMethodName() { return methodName; }
         public SqlInfo.SqlType getSqlType() { return sqlType; }
         public String getSqlId() { return sqlId; }
+        public String getXmlFileName() { return xmlFileName; }
+        public String getQuery() { return query; }
     }
 
     /**
@@ -663,7 +670,9 @@ public class FlowAnalyzer {
                     node.getClassName(),
                     node.getMethodName(),
                     sqlInfo.getType(),
-                    sqlInfo.getFullSqlId()
+                    sqlInfo.getSqlId(),
+                    sqlInfo.getFileName(),
+                    sqlInfo.getQuery()
                 ));
             }
         }

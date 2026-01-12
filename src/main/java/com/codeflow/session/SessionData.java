@@ -22,6 +22,11 @@ public class SessionData {
     private List<String> recentPaths;     // 최근 프로젝트 경로 목록
     private String endpointFilter;        // 엔드포인트 검색 필터 (왼쪽 패널)
     private List<String> sqlTypeFilter;   // SQL 타입 필터 (SELECT, INSERT, UPDATE, DELETE)
+    private int selectedTabIndex;         // 선택된 탭 인덱스 (0: 호출 흐름, 1: 테이블 영향도)
+    private String selectedEndpoint;      // 선택된 엔드포인트 URL (호출 흐름 탭)
+    private String selectedTable;         // 선택된 테이블명 (테이블 영향도 탭)
+    private boolean tableDetailViewActive; // 쿼리 상세 화면 활성화 여부 (테이블 영향도 탭)
+    private int selectedQueryRowIndex = -1; // 선택된 쿼리 행 인덱스 (테이블 영향도 탭, -1은 전체 쿼리)
 
     public SessionData() {
     }
@@ -95,6 +100,46 @@ public class SessionData {
 
     public void setSqlTypeFilter(List<String> sqlTypeFilter) {
         this.sqlTypeFilter = sqlTypeFilter;
+    }
+
+    public int getSelectedTabIndex() {
+        return selectedTabIndex;
+    }
+
+    public void setSelectedTabIndex(int selectedTabIndex) {
+        this.selectedTabIndex = selectedTabIndex;
+    }
+
+    public String getSelectedEndpoint() {
+        return selectedEndpoint;
+    }
+
+    public void setSelectedEndpoint(String selectedEndpoint) {
+        this.selectedEndpoint = selectedEndpoint;
+    }
+
+    public String getSelectedTable() {
+        return selectedTable;
+    }
+
+    public void setSelectedTable(String selectedTable) {
+        this.selectedTable = selectedTable;
+    }
+
+    public boolean isTableDetailViewActive() {
+        return tableDetailViewActive;
+    }
+
+    public void setTableDetailViewActive(boolean tableDetailViewActive) {
+        this.tableDetailViewActive = tableDetailViewActive;
+    }
+
+    public int getSelectedQueryRowIndex() {
+        return selectedQueryRowIndex;
+    }
+
+    public void setSelectedQueryRowIndex(int selectedQueryRowIndex) {
+        this.selectedQueryRowIndex = selectedQueryRowIndex;
     }
 
     /**

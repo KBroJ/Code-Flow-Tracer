@@ -19,6 +19,8 @@ import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.*;
 import java.awt.event.ActionEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -47,8 +49,13 @@ public class MainFrame extends JFrame {
     // 레이아웃 컴포넌트
     private JPanel sidePanel;
     private JPanel endpointListPanel;
+    private JPanel tableListPanel;      // 테이블 영향도용 왼쪽 패널
+    private JPanel leftCardPanel;       // CardLayout으로 전환되는 왼쪽 패널
+    private CardLayout leftCardLayout;
     private JSplitPane mainSplitPane;
     private static final int ENDPOINT_PANEL_WIDTH = 200;
+    private static final String CARD_ENDPOINT = "endpoint";
+    private static final String CARD_TABLE = "table";
 
     // 엔드포인트 목록 컴포넌트
     private JTextField endpointSearchField;
@@ -57,13 +64,33 @@ public class MainFrame extends JFrame {
     private JLabel endpointCountLabel;
     private List<String> allEndpoints = new ArrayList<>();
 
+    // 테이블 목록 컴포넌트 (테이블 영향도용)
+    private JTextField tableSearchField;
+    private JList<String> tableList;
+    private DefaultListModel<String> tableListModel;
+    private JLabel tableCountLabel;
+    private List<String> allTableNames = new ArrayList<>();
+
     // 분석 요약 패널
     private JPanel summaryPanel;
+    private JPanel summaryCardPanel;      // CardLayout으로 전환되는 요약 패널
+    private CardLayout summaryCardLayout;
+    private static final String SUMMARY_CLASS = "classStats";
+    private static final String SUMMARY_CRUD = "crudStats";
+
+    // 클래스 통계 라벨 (호출 흐름 탭)
     private JLabel lblTotalClasses;
     private JLabel lblControllerCount;
     private JLabel lblServiceCount;
     private JLabel lblDaoCount;
     private JLabel lblEndpointCount;
+
+    // CRUD 통계 라벨 (테이블 영향도 탭)
+    private JLabel lblTotalTables;
+    private JLabel lblSelectCount;
+    private JLabel lblInsertCount;
+    private JLabel lblUpdateCount;
+    private JLabel lblDeleteCount;
 
     // 프로젝트 경로
     private JComboBox<String> projectPathComboBox;
@@ -71,6 +98,7 @@ public class MainFrame extends JFrame {
 
     // 분석 옵션
     private JTextField urlFilterField;
+    private JPanel urlFilterPanel;        // URL 필터 영역 (탭별 표시/숨김용)
     private JRadioButton rbCompact;
     private JRadioButton rbNormal;
     private JRadioButton rbDetailed;
@@ -88,7 +116,9 @@ public class MainFrame extends JFrame {
     private JButton settingsButton;
 
     // 결과 표시
+    private JTabbedPane resultTabbedPane;
     private ResultPanel resultPanel;
+    private TableImpactPanel tableImpactPanel;
 
     // 진행 상태
     private JProgressBar progressBar;
@@ -141,6 +171,8 @@ public class MainFrame extends JFrame {
         addWindowListener(new java.awt.event.WindowAdapter() {
             @Override
             public void windowClosing(java.awt.event.WindowEvent e) {
+                // 종료 전 세션 저장 (탭/테이블 선택 상태 포함)
+                saveSession();
                 System.exit(0);
             }
         });
@@ -150,12 +182,19 @@ public class MainFrame extends JFrame {
      * UI 컴포넌트 초기화
      */
     private void initializeComponents() {
-        // 분석 요약 라벨
+        // 클래스 통계 라벨 (호출 흐름 탭용)
         lblTotalClasses = new JLabel("-");
         lblControllerCount = new JLabel("-");
         lblServiceCount = new JLabel("-");
         lblDaoCount = new JLabel("-");
         lblEndpointCount = new JLabel("-");
+
+        // CRUD 통계 라벨 (테이블 영향도 탭용)
+        lblTotalTables = new JLabel("-");
+        lblSelectCount = new JLabel("-");
+        lblInsertCount = new JLabel("-");
+        lblUpdateCount = new JLabel("-");
+        lblDeleteCount = new JLabel("-");
 
         // 프로젝트 경로
         projectPathComboBox = new JComboBox<>();
@@ -207,6 +246,13 @@ public class MainFrame extends JFrame {
 
         // 결과 패널
         resultPanel = new ResultPanel();
+        tableImpactPanel = new TableImpactPanel();
+
+        // 탭 패널 (호출 흐름 + 테이블 영향도)
+        resultTabbedPane = new JTabbedPane();
+        resultTabbedPane.addTab("호출 흐름", resultPanel);
+        resultTabbedPane.addTab("테이블 영향도", tableImpactPanel);
+        resultTabbedPane.setFont(resultTabbedPane.getFont().deriveFont(13f));
 
         // 진행 상태
         progressBar = new JProgressBar();
@@ -223,6 +269,14 @@ public class MainFrame extends JFrame {
         endpointList = new JList<>(endpointListModel);
         endpointList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         endpointCountLabel = new JLabel("0개 항목");
+
+        // 테이블 목록 컴포넌트
+        tableSearchField = new JTextField();
+        tableSearchField.setToolTipText("테이블명 검색");
+        tableListModel = new DefaultListModel<>();
+        tableList = new JList<>(tableListModel);
+        tableList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        tableCountLabel = new JLabel("0개 테이블");
     }
 
     /**
@@ -231,15 +285,22 @@ public class MainFrame extends JFrame {
     private void layoutComponents() {
         setLayout(new BorderLayout());
 
-        // 좌측 엔드포인트 목록 패널
+        // 좌측 패널들 생성
         endpointListPanel = createEndpointListPanel();
+        tableListPanel = createTableListPanel();
 
-        // 메인 영역 (결과 패널)
+        // CardLayout으로 왼쪽 패널 전환
+        leftCardLayout = new CardLayout();
+        leftCardPanel = new JPanel(leftCardLayout);
+        leftCardPanel.add(endpointListPanel, CARD_ENDPOINT);
+        leftCardPanel.add(tableListPanel, CARD_TABLE);
+
+        // 메인 영역 (탭 패널: 호출 흐름 + 테이블 영향도)
         JPanel mainPanel = new JPanel(new BorderLayout());
-        mainPanel.add(resultPanel, BorderLayout.CENTER);
+        mainPanel.add(resultTabbedPane, BorderLayout.CENTER);
 
-        // JSplitPane: 좌측 URL 목록 + 결과 패널 (드래그 조절 가능)
-        mainSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, endpointListPanel, mainPanel);
+        // JSplitPane: 좌측 목록 패널 + 결과 패널 (드래그 조절 가능)
+        mainSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftCardPanel, mainPanel);
         mainSplitPane.setDividerLocation(ENDPOINT_PANEL_WIDTH);  // 처음부터 왼쪽 패널 표시
         mainSplitPane.setDividerSize(6);
         mainSplitPane.setContinuousLayout(true);
@@ -295,6 +356,43 @@ public class MainFrame extends JFrame {
         endpointList.setFont(new Font("D2Coding", Font.PLAIN, 14));
         endpointList.setFixedCellHeight(28);
         JScrollPane listScrollPane = new JScrollPane(endpointList);
+        listScrollPane.setBorder(BorderFactory.createEmptyBorder());
+        panel.add(listScrollPane, BorderLayout.CENTER);
+
+        return panel;
+    }
+
+    /**
+     * 테이블 목록 패널 생성 (테이블 영향도 탭용)
+     */
+    private JPanel createTableListPanel() {
+        JPanel panel = new JPanel(new BorderLayout(0, 5));
+        panel.setBorder(new EmptyBorder(8, 10, 10, 6));
+        panel.setPreferredSize(new Dimension(ENDPOINT_PANEL_WIDTH, 0));
+        panel.setMinimumSize(new Dimension(120, 0));
+
+        // 상단: 검색 필드 + 테이블 수
+        JPanel headerPanel = new JPanel(new BorderLayout(0, 4));
+
+        JPanel searchPanel = new JPanel(new BorderLayout());
+        JLabel searchIcon = new JLabel("🔍 ");
+        searchIcon.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 12));
+        tableSearchField.setPreferredSize(new Dimension(0, 28));
+        searchPanel.add(searchIcon, BorderLayout.WEST);
+        searchPanel.add(tableSearchField, BorderLayout.CENTER);
+        headerPanel.add(searchPanel, BorderLayout.NORTH);
+
+        // 테이블 수 표시
+        tableCountLabel.setForeground(new Color(150, 150, 150));
+        tableCountLabel.setFont(tableCountLabel.getFont().deriveFont(11f));
+        headerPanel.add(tableCountLabel, BorderLayout.SOUTH);
+
+        panel.add(headerPanel, BorderLayout.NORTH);
+
+        // 중앙: 테이블 리스트
+        tableList.setFont(new Font("D2Coding", Font.PLAIN, 14));
+        tableList.setFixedCellHeight(28);
+        JScrollPane listScrollPane = new JScrollPane(tableList);
         listScrollPane.setBorder(BorderFactory.createEmptyBorder());
         panel.add(listScrollPane, BorderLayout.CENTER);
 
@@ -362,7 +460,31 @@ public class MainFrame extends JFrame {
         section.add(sectionLabel);
         section.add(Box.createVerticalStrut(10));
 
-        // 요약 테이블 (전체 너비 사용, 점선 리더로 채움)
+        // CardLayout으로 클래스 통계 / CRUD 통계 전환
+        summaryCardLayout = new CardLayout();
+        summaryCardPanel = new JPanel(summaryCardLayout);
+        summaryCardPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        // Card 1: 클래스 통계 (호출 흐름 탭용)
+        JPanel classStatsPanel = createClassStatsPanel();
+        summaryCardPanel.add(classStatsPanel, SUMMARY_CLASS);
+
+        // Card 2: CRUD 통계 (테이블 영향도 탭용)
+        JPanel crudStatsPanel = createCrudStatsPanel();
+        summaryCardPanel.add(crudStatsPanel, SUMMARY_CRUD);
+
+        section.add(summaryCardPanel);
+        section.add(Box.createVerticalStrut(12));
+        section.add(createSeparator());
+        section.add(Box.createVerticalStrut(12));
+
+        return section;
+    }
+
+    /**
+     * 클래스 통계 패널 생성 (호출 흐름 탭용)
+     */
+    private JPanel createClassStatsPanel() {
         JPanel tablePanel = new JPanel();
         tablePanel.setLayout(new BoxLayout(tablePanel, BoxLayout.Y_AXIS));
         tablePanel.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -390,12 +512,43 @@ public class MainFrame extends JFrame {
         lblEndpointCount.setForeground(COLOR_CONTROLLER);
         tablePanel.add(createSummaryRow(endpointLabel, lblEndpointCount));
 
-        section.add(tablePanel);
-        section.add(Box.createVerticalStrut(12));
-        section.add(createSeparator());
-        section.add(Box.createVerticalStrut(12));
+        return tablePanel;
+    }
 
-        return section;
+    /**
+     * CRUD 통계 패널 생성 (테이블 영향도 탭용)
+     */
+    private JPanel createCrudStatsPanel() {
+        JPanel tablePanel = new JPanel();
+        tablePanel.setLayout(new BoxLayout(tablePanel, BoxLayout.Y_AXIS));
+        tablePanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        // 테이블 수
+        JLabel tableLabel = new JLabel("테이블");
+        tableLabel.setFont(tableLabel.getFont().deriveFont(Font.BOLD));
+        lblTotalTables.setFont(lblTotalTables.getFont().deriveFont(Font.BOLD));
+        lblTotalTables.setForeground(COLOR_CONTROLLER);
+        tablePanel.add(createSummaryRow(tableLabel, lblTotalTables));
+
+        // 빈 줄
+        tablePanel.add(Box.createVerticalStrut(8));
+
+        // CRUD 하위 항목
+        tablePanel.add(createSummaryRow("SQL 쿼리", new JLabel(""), null));
+
+        lblSelectCount.setForeground(COLOR_CONTROLLER);
+        tablePanel.add(createSummaryRow("  ├ SELECT", lblSelectCount, COLOR_CONTROLLER));
+
+        lblInsertCount.setForeground(COLOR_SERVICE);
+        tablePanel.add(createSummaryRow("  ├ INSERT", lblInsertCount, COLOR_SERVICE));
+
+        lblUpdateCount.setForeground(new Color(220, 180, 100));  // 노란색 계열
+        tablePanel.add(createSummaryRow("  ├ UPDATE", lblUpdateCount, new Color(220, 180, 100)));
+
+        lblDeleteCount.setForeground(new Color(214, 86, 86));  // 빨간색 계열
+        tablePanel.add(createSummaryRow("  └ DELETE", lblDeleteCount, new Color(214, 86, 86)));
+
+        return tablePanel;
     }
 
     /**
@@ -446,16 +599,22 @@ public class MainFrame extends JFrame {
         section.add(sectionLabel);
         section.add(Box.createVerticalStrut(10));
 
-        // URL 필터
+        // URL 필터 (탭별 표시/숨김용 패널로 감싸기)
+        urlFilterPanel = new JPanel();
+        urlFilterPanel.setLayout(new BoxLayout(urlFilterPanel, BoxLayout.Y_AXIS));
+        urlFilterPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
         JLabel urlLabel = new JLabel("URL 필터");
         urlLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        section.add(urlLabel);
-        section.add(Box.createVerticalStrut(3));
+        urlFilterPanel.add(urlLabel);
+        urlFilterPanel.add(Box.createVerticalStrut(3));
 
         urlFilterField.setAlignmentX(Component.LEFT_ALIGNMENT);
         urlFilterField.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
-        section.add(urlFilterField);
-        section.add(Box.createVerticalStrut(12));
+        urlFilterPanel.add(urlFilterField);
+        urlFilterPanel.add(Box.createVerticalStrut(12));
+
+        section.add(urlFilterPanel);
 
         // 출력 스타일 (가로 배치)
         JLabel styleLabel = new JLabel("출력 스타일");
@@ -634,6 +793,59 @@ public class MainFrame extends JFrame {
         cbInsert.addActionListener(e -> applyFiltersAndRefresh());
         cbUpdate.addActionListener(e -> applyFiltersAndRefresh());
         cbDelete.addActionListener(e -> applyFiltersAndRefresh());
+
+        // 탭 전환 시 왼쪽 패널, 분석 요약, URL 필터 변경
+        resultTabbedPane.addChangeListener(e -> {
+            int selectedIndex = resultTabbedPane.getSelectedIndex();
+            if (selectedIndex == 0) {
+                // 호출 흐름 탭 → 엔드포인트 목록, 클래스 통계, URL 필터 표시
+                leftCardLayout.show(leftCardPanel, CARD_ENDPOINT);
+                summaryCardLayout.show(summaryCardPanel, SUMMARY_CLASS);
+                urlFilterPanel.setVisible(true);
+            } else {
+                // 테이블 영향도 탭 → 테이블 목록, CRUD 통계, URL 필터 숨김
+                leftCardLayout.show(leftCardPanel, CARD_TABLE);
+                summaryCardLayout.show(summaryCardPanel, SUMMARY_CRUD);
+                urlFilterPanel.setVisible(false);
+                // CRUD 통계 업데이트
+                if (currentResult != null) {
+                    updateCrudSummaryPanel(currentResult);
+                }
+            }
+        });
+
+        // 테이블 목록 클릭 이벤트 (단일 클릭 → 접근 정보 표시)
+        tableList.addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting()) {
+                String selected = tableList.getSelectedValue();
+                if (selected != null) {
+                    tableImpactPanel.displayTableAccesses(selected);
+                }
+            }
+        });
+
+        // 테이블 목록 더블클릭 이벤트 (쿼리 상세 화면)
+        tableList.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2) {
+                    String selected = tableList.getSelectedValue();
+                    if (selected != null) {
+                        tableImpactPanel.showQueryDetailView(selected);
+                    }
+                }
+            }
+        });
+
+        // 테이블 검색 필터링
+        tableSearchField.getDocument().addDocumentListener(new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent e) { filterTableList(); }
+            @Override
+            public void removeUpdate(DocumentEvent e) { filterTableList(); }
+            @Override
+            public void changedUpdate(DocumentEvent e) { filterTableList(); }
+        });
     }
 
     /**
@@ -667,11 +879,16 @@ public class MainFrame extends JFrame {
                 projectPathComboBox.removeAllItems();
                 urlFilterField.setText("");
                 endpointSearchField.setText("");
+                tableSearchField.setText("");
                 rbNormal.setSelected(true);
                 endpointListModel.clear();  // 왼쪽 엔드포인트 목록 초기화
+                tableListModel.clear();     // 왼쪽 테이블 목록 초기화
+                allTableNames.clear();
                 resultPanel.clear();  // 분석 결과 화면도 초기화
+                tableImpactPanel.clear();  // 테이블 영향도 초기화
                 originalResult = null;  // 원본 결과 초기화
                 currentResult = null;  // 분석 결과 객체도 초기화
+                tableCountLabel.setText("0개 테이블");
                 // 분석 요약도 초기화
                 lblTotalClasses.setText("0개");
                 lblControllerCount.setText("0개");
@@ -781,6 +998,7 @@ public class MainFrame extends JFrame {
         progressBar.setString("분석 중...");
         statusLabel.setText("프로젝트를 분석하고 있습니다...");
         resultPanel.clear();
+        tableImpactPanel.clear();
 
         // 분석 중 상태 표시 (패널은 유지, 값만 초기화)
         lblTotalClasses.setText("-");
@@ -852,6 +1070,12 @@ public class MainFrame extends JFrame {
                     String selectedStyle = getSelectedStyle();
                     resultPanel.displayResult(currentResult, selectedStyle);
 
+                    // 테이블 영향도 업데이트 (먼저 데이터 설정)
+                    tableImpactPanel.updateData(currentResult);
+
+                    // 테이블 목록 업데이트 (데이터 설정 후 호출해야 displayTableAccesses 동작)
+                    updateTableList(currentResult);
+
                     // 상태 업데이트
                     int totalCount = originalResult.getFlows().size();
                     int shownCount = currentResult.getFlows().size();
@@ -895,6 +1119,45 @@ public class MainFrame extends JFrame {
         lblServiceCount.setText(result.getFlowBasedServiceCount() + "개");
         lblDaoCount.setText(result.getFlowBasedDaoCount() + "개");
         lblEndpointCount.setText(result.getFlowBasedEndpointCount() + "개");
+
+        // CRUD 통계도 업데이트 (테이블 영향도 탭에서 사용)
+        updateCrudSummaryPanel(result);
+    }
+
+    /**
+     * CRUD 통계 패널 업데이트 (테이블 영향도 탭용)
+     */
+    private void updateCrudSummaryPanel(FlowResult result) {
+        if (result == null) {
+            lblTotalTables.setText("-");
+            lblSelectCount.setText("-");
+            lblInsertCount.setText("-");
+            lblUpdateCount.setText("-");
+            lblDeleteCount.setText("-");
+            return;
+        }
+
+        // FlowAnalyzer에서 테이블 인덱스 빌드
+        FlowAnalyzer analyzer = new FlowAnalyzer();
+        Map<String, FlowAnalyzer.TableImpact> tableIndex = analyzer.buildTableIndex(result);
+
+        // 테이블 수
+        lblTotalTables.setText(tableIndex.size() + "개");
+
+        // CRUD 통계 계산
+        long selectCount = 0, insertCount = 0, updateCount = 0, deleteCount = 0;
+        for (FlowAnalyzer.TableImpact impact : tableIndex.values()) {
+            Map<SqlInfo.SqlType, Long> counts = impact.getCrudCounts();
+            selectCount += counts.getOrDefault(SqlInfo.SqlType.SELECT, 0L);
+            insertCount += counts.getOrDefault(SqlInfo.SqlType.INSERT, 0L);
+            updateCount += counts.getOrDefault(SqlInfo.SqlType.UPDATE, 0L);
+            deleteCount += counts.getOrDefault(SqlInfo.SqlType.DELETE, 0L);
+        }
+
+        lblSelectCount.setText(selectCount + "개");
+        lblInsertCount.setText(insertCount + "개");
+        lblUpdateCount.setText(updateCount + "개");
+        lblDeleteCount.setText(deleteCount + "개");
     }
 
     /**
@@ -1060,13 +1323,23 @@ public class MainFrame extends JFrame {
 
         String urlFilter = urlFilterField.getText().trim();
         String outputStyle = getSelectedStyle();
+        int selectedTabIndex = resultTabbedPane.getSelectedIndex();
+        String selectedEndpoint = endpointList.getSelectedValue();
+        String selectedTable = tableList.getSelectedValue();
+        boolean tableDetailViewActive = tableImpactPanel.isQueryDetailViewActive();
+        int selectedQueryRowIndex = tableImpactPanel.getSelectedQueryRowIndex();
 
         // 원본 결과 저장 (필터 없는 상태)
         boolean saved = sessionManager.saveSession(
                 currentProjectPath.toString(),
                 originalResult,
                 urlFilter,
-                outputStyle
+                outputStyle,
+                selectedTabIndex,
+                selectedEndpoint,
+                selectedTable,
+                tableDetailViewActive,
+                selectedQueryRowIndex
         );
 
         if (saved) {
@@ -1107,6 +1380,13 @@ public class MainFrame extends JFrame {
             currentResult = originalResult;
         }
 
+        // 저장된 상태 값들
+        final int savedTabIndex = session.getSelectedTabIndex();
+        final String savedSelectedEndpoint = session.getSelectedEndpoint();
+        final String savedSelectedTable = session.getSelectedTable();
+        final boolean savedTableDetailViewActive = session.isTableDetailViewActive();
+        final int savedQueryRowIndex = session.getSelectedQueryRowIndex();
+
         // UI 업데이트
         SwingUtilities.invokeLater(() -> {
             // 요약 정보 업데이트
@@ -1122,6 +1402,43 @@ public class MainFrame extends JFrame {
             }
             resultPanel.displayResult(currentResult, style);
 
+            // 테이블 영향도 업데이트 (먼저 데이터 설정)
+            tableImpactPanel.updateData(currentResult);
+
+            // 테이블 목록 업데이트 (데이터 설정 후 호출)
+            updateTableList(currentResult);
+
+            // 엔드포인트 선택 복원 (호출 흐름 탭)
+            if (savedSelectedEndpoint != null && !savedSelectedEndpoint.isEmpty()) {
+                for (int i = 0; i < endpointListModel.size(); i++) {
+                    if (savedSelectedEndpoint.equals(endpointListModel.get(i))) {
+                        endpointList.setSelectedIndex(i);
+                        endpointList.ensureIndexIsVisible(i);
+                        break;
+                    }
+                }
+            }
+
+            // 테이블 선택 복원 (테이블 영향도 탭)
+            if (savedSelectedTable != null && !savedSelectedTable.isEmpty()) {
+                for (int i = 0; i < tableListModel.size(); i++) {
+                    if (savedSelectedTable.equals(tableListModel.get(i))) {
+                        tableList.setSelectedIndex(i);
+                        tableList.ensureIndexIsVisible(i);
+                        // 쿼리 상세 화면이 활성화 상태였다면 복원
+                        if (savedTableDetailViewActive && !savedSelectedTable.equals(ALL_TABLES)) {
+                            tableImpactPanel.restoreQueryView(savedQueryRowIndex);
+                        }
+                        break;
+                    }
+                }
+            }
+
+            // 탭 선택 복원
+            if (savedTabIndex >= 0 && savedTabIndex < resultTabbedPane.getTabCount()) {
+                resultTabbedPane.setSelectedIndex(savedTabIndex);
+            }
+
             // 상태 업데이트
             int totalCount = originalResult.getFlows().size();
             int shownCount = currentResult.getFlows().size();
@@ -1134,6 +1451,13 @@ public class MainFrame extends JFrame {
             }
 
             exportExcelButton.setEnabled(true);
+
+            // 스크롤 복원은 UI 렌더링 후에 실행 (타이밍 문제 해결)
+            if (savedSelectedEndpoint != null && !savedSelectedEndpoint.isEmpty()) {
+                SwingUtilities.invokeLater(() -> {
+                    resultPanel.scrollToEndpoint(savedSelectedEndpoint);
+                });
+            }
 
             System.out.println("세션 복원 완료: " + currentProjectPath);
         });
@@ -1187,22 +1511,89 @@ public class MainFrame extends JFrame {
         endpointCountLabel.setText(count + "개 항목");
     }
 
+    private static final String ALL_TABLES = "== 전체 ==";
+
+    /**
+     * 테이블 목록 업데이트 (테이블 영향도용)
+     */
+    private void updateTableList(FlowResult result) {
+        allTableNames.clear();
+        tableListModel.clear();
+
+        if (result == null) {
+            tableCountLabel.setText("0개 테이블");
+            return;
+        }
+
+        // FlowAnalyzer에서 테이블 인덱스 빌드
+        FlowAnalyzer analyzer = new FlowAnalyzer();
+        Map<String, FlowAnalyzer.TableImpact> tableIndex = analyzer.buildTableIndex(result);
+
+        allTableNames.addAll(tableIndex.keySet());
+        allTableNames.sort(String::compareTo);
+
+        // "전체" 옵션 추가
+        tableListModel.addElement(ALL_TABLES);
+
+        for (String tableName : allTableNames) {
+            tableListModel.addElement(tableName);
+        }
+
+        tableCountLabel.setText(allTableNames.size() + "개 테이블");
+
+        // "전체" 기본 선택 및 상세 화면 표시
+        if (tableListModel.size() > 0) {
+            tableList.setSelectedIndex(0);
+            tableImpactPanel.displayTableAccesses(ALL_TABLES);
+        }
+    }
+
+    /**
+     * 테이블 목록 필터링
+     */
+    private void filterTableList() {
+        String filter = tableSearchField.getText().toUpperCase().trim();
+        tableListModel.clear();
+
+        int count = 0;
+        for (String tableName : allTableNames) {
+            if (filter.isEmpty() || tableName.contains(filter)) {
+                tableListModel.addElement(tableName);
+                count++;
+            }
+        }
+
+        tableCountLabel.setText(count + "개 테이블");
+    }
+
     /**
      * CRUD 필터 적용 및 화면 갱신 (실시간 필터링)
+     * 테이블 영향도 탭에서는 현재 테이블/쿼리 선택 상태 유지
      */
     private void applyFiltersAndRefresh() {
         if (originalResult == null) {
             return;  // 분석 결과 없으면 무시
         }
 
+        // 테이블 영향도 탭인 경우 현재 상태 저장
+        final int currentTab = resultTabbedPane.getSelectedIndex();
+        final String savedTableSelection = tableList.getSelectedValue();
+        final boolean savedQueryDetailActive = tableImpactPanel.isQueryDetailViewActive();
+        final int savedQueryRowIndex = tableImpactPanel.getSelectedQueryRowIndex();
+
         // 필터링 적용
-        FlowResult filtered = originalResult;
-        if (!isAllSqlTypesSelected()) {
-            List<String> sqlTypes = getSelectedSqlTypes();
-            if (!sqlTypes.isEmpty()) {
-                FlowAnalyzer analyzer = new FlowAnalyzer();
-                filtered = analyzer.filterBySqlType(originalResult, sqlTypes);
-            }
+        FlowResult filtered;
+        List<String> sqlTypes = getSelectedSqlTypes();
+        if (sqlTypes.isEmpty()) {
+            // 모든 체크박스 해제 시 빈 결과
+            filtered = new FlowResult(originalResult.getProjectPath());
+        } else if (!isAllSqlTypesSelected()) {
+            // 일부만 선택 시 필터링
+            FlowAnalyzer analyzer = new FlowAnalyzer();
+            filtered = analyzer.filterBySqlType(originalResult, sqlTypes);
+        } else {
+            // 모두 선택 시 원본
+            filtered = originalResult;
         }
         currentResult = filtered;
 
@@ -1210,6 +1601,29 @@ public class MainFrame extends JFrame {
         updateSummaryPanel(filtered);
         updateEndpointList(filtered);
         resultPanel.displayResult(filtered, getSelectedStyle());
+        tableImpactPanel.updateData(filtered);
+
+        // 테이블 영향도 탭인 경우 상태 복원
+        if (currentTab == 1 && savedTableSelection != null) {
+            // 테이블 목록 업데이트 (기본 선택 하지 않음)
+            updateTableListWithoutSelection(filtered);
+
+            // 저장된 테이블 선택 복원
+            for (int i = 0; i < tableListModel.size(); i++) {
+                if (savedTableSelection.equals(tableListModel.get(i))) {
+                    tableList.setSelectedIndex(i);
+                    tableList.ensureIndexIsVisible(i);
+                    // 쿼리 상세 화면 복원
+                    if (savedQueryDetailActive && !savedTableSelection.equals(ALL_TABLES)) {
+                        tableImpactPanel.restoreQueryView(savedQueryRowIndex);
+                    }
+                    break;
+                }
+            }
+        } else {
+            // 호출 흐름 탭이거나 테이블 선택 없으면 기본 동작
+            updateTableList(filtered);
+        }
 
         // 상태 표시
         int total = originalResult.getFlows().size();
@@ -1222,6 +1636,36 @@ public class MainFrame extends JFrame {
 
         // 설정 저장 (필터 상태)
         saveSettings();
+    }
+
+    /**
+     * 테이블 목록 업데이트 (기본 선택 없이)
+     * SQL 필터 변경 시 현재 선택 유지를 위해 사용
+     */
+    private void updateTableListWithoutSelection(FlowResult result) {
+        allTableNames.clear();
+        tableListModel.clear();
+
+        if (result == null) {
+            tableCountLabel.setText("0개 테이블");
+            return;
+        }
+
+        // FlowAnalyzer에서 테이블 인덱스 빌드
+        FlowAnalyzer analyzer = new FlowAnalyzer();
+        Map<String, FlowAnalyzer.TableImpact> tableIndex = analyzer.buildTableIndex(result);
+
+        allTableNames.addAll(tableIndex.keySet());
+        allTableNames.sort(String::compareTo);
+
+        // "전체" 옵션 추가
+        tableListModel.addElement(ALL_TABLES);
+
+        for (String tableName : allTableNames) {
+            tableListModel.addElement(tableName);
+        }
+
+        tableCountLabel.setText(allTableNames.size() + "개 테이블");
     }
 
     /**

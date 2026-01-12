@@ -76,8 +76,10 @@ java -jar code-flow-tracer.jar -p /path/to/project -s detailed
 | **CRUD 실시간 필터** | SELECT/INSERT/UPDATE/DELETE 체크박스로 즉시 필터링 |
 | **출력 스타일** | Compact, Normal, Detailed 선택 |
 | **결과 보기** | 콘솔 스타일 트리 출력, 텍스트 드래그 선택 가능 |
+| **테이블 영향도 분석** | 테이블별 CRUD 통계, 접근 URL 역추적, 실시간 검색 필터 |
 | **엑셀 저장** | 분석 결과를 엑셀 파일로 저장 (테이블 영향도 시트 포함) |
 | **폰트 크기 조절** | Ctrl + 마우스 휠로 9px~24px 조절 |
+| **마우스 뒤로가기** | 마우스 뒤로가기 버튼으로 이전 화면 복귀 지원 |
 | **패널 리사이즈** | 좌측 설정 패널 드래그로 크기 조절 |
 
 </details>
