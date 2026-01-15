@@ -2408,6 +2408,252 @@ Session 29 (01/12)    → GUI 테이블 영향도 탭 (#30) + UX 개선
 
 ---
 
+## 실무 테스트 발견 문제 (Session 31)
+
+### Issue #031: HTTP Method가 ALL로 표시됨
+
+**발생일**: 2026-01-15
+**상태**: 🟡 진행중
+
+#### 문제 상황
+실무 프로젝트에서 CTF 테스트 결과, 모든 엔드포인트가 `[ALL]`로 표시됨:
+```
+[ALL] /kiss/getKissEncryption.do
+[ALL] /bookFinder/system/start
+[ALL] /bookFinder/main
+```
+
+실제 코드에는 GET/POST 구분이 있는데도 ALL로 표시되어 혼란 발생.
+
+#### 원인 분석
+`JavaSourceParser.extractHttpMethod()` 함수가 **어노테이션 이름**만으로 HTTP 메서드 결정:
+
+```java
+// JavaSourceParser.java:519-525
+private String extractHttpMethod(String annotationName) {
+    if (annotationName.equals("GetMapping")) return "GET";
+    if (annotationName.equals("PostMapping")) return "POST";
+    // ...
+    return "ALL";  // ← @RequestMapping은 여기로 빠짐
+}
+```
+
+**문제 케이스**:
+1. `@RequestMapping("/url")` → method 속성 없음 → ALL
+2. `@RequestMapping(value="/url", method=RequestMethod.POST)` → method 속성 파싱 안 함 → ALL
+
+#### 해결 방안
+
+**방안 1: @RequestMapping의 method 속성 파싱** ✅ 권장
+```java
+// NormalAnnotationExpr에서 method 속성 추출
+if (annotationName.equals("RequestMapping")) {
+    for (MemberValuePair pair : annotation.getPairs()) {
+        if (pair.getNameAsString().equals("method")) {
+            // RequestMethod.GET, RequestMethod.POST 등 파싱
+            return extractMethodFromValue(pair.getValue());
+        }
+    }
+    return "ALL";  // method 속성 없으면 실제로 ALL
+}
+```
+
+**방안 2: 표시 방식 변경**
+- "ALL" 대신 "ANY" 또는 "@RequestMapping"으로 표시
+- 사용자에게 "이건 모든 HTTP 메서드 허용"임을 명확히 전달
+
+#### 선택된 해결책: 방안 1 (method 속성 파싱)
+
+**구현 계획**:
+1. `JavaSourceParser.parseMethod()`에서 `@RequestMapping` 처리 시 method 속성 확인
+2. `NormalAnnotationExpr`의 `MemberValuePair`에서 "method" 키 찾기
+3. `RequestMethod.GET` → "GET" 변환 로직 추가
+4. 복수 메서드 `{GET, POST}` → "GET/POST" 처리
+
+---
+
+### Issue #032: 같은 클래스 내부 함수 호출 미추적
+
+**발생일**: 2026-01-15
+**상태**: 🟡 진행중
+
+#### 문제 상황
+Controller 내에서 private 메서드 호출이 추적되지 않음:
+
+```java
+@Controller
+public class KissEncryption {
+    @RequestMapping("/kiss/getKissEncryption.do")
+    public JSONObject getKissEncryption(...) {
+        String code = this.getCode();   // ← 추적 안 됨
+        String today = getToday();      // ← 추적 안 됨
+        // ...
+    }
+
+    private String getCode() { ... }    // 이 메서드로 따라가지 않음
+    private String getToday() { ... }
+}
+```
+
+#### 원인 분석
+`MethodCall.isServiceOrDaoCall()` 함수가 scope 기반으로 필터링:
+
+```java
+// MethodCall.java:54-62
+public boolean isServiceOrDaoCall() {
+    if (scope == null || scope.isEmpty()) {
+        return false;  // ← 내부 호출은 scope가 비어있음!
+    }
+    String lowerScope = scope.toLowerCase();
+    return lowerScope.contains("service") ||
+           lowerScope.contains("dao") || ...
+}
+```
+
+**필터링 조건**:
+- `userService.findById()` → scope="userService" → ✅ 추적
+- `getCode()` → scope="" → ❌ 스킵
+- `this.getCode()` → scope="this" → ❌ 스킵 (service/dao 아님)
+
+#### 해결 방안
+
+**방안 1: 현재 클래스 컨텍스트 전달** ✅ 권장
+```java
+// buildFlowTree()에서 현재 클래스를 traceMethodCall()에 전달
+private FlowNode traceMethodCall(MethodCall call, int depth, ParsedClass currentClass) {
+    // scope가 비어있거나 "this"인 경우 → 현재 클래스에서 메서드 찾기
+    if (call.getScope().isEmpty() || call.getScope().equals("this")) {
+        ParsedMethod localMethod = findMethod(currentClass, call.getMethodName());
+        if (localMethod != null) {
+            return buildFlowTree(currentClass, localMethod, depth);
+        }
+    }
+    // 기존 로직...
+}
+```
+
+**방안 2: 옵션으로 제공**
+- `--trace-internal-calls` 옵션 추가
+- 기본값 OFF (노이즈 방지), 필요 시 ON
+
+**트레이드오프 고려**:
+- 장점: 더 완전한 호출 흐름 파악
+- 단점: 노이즈 증가 (getter/setter, 유틸 메서드 등 모두 표시)
+- 해결: private 메서드만 추적 또는 depth 제한
+
+#### 선택된 해결책: 방안 1 (현재 클래스 컨텍스트 전달)
+
+**구현 계획**:
+1. `FlowAnalyzer.buildFlowTree()`에서 `traceMethodCall()` 호출 시 `currentClass` 전달
+2. `traceMethodCall()` 시그니처 변경: `(MethodCall, int, ParsedClass)`
+3. scope가 빈 문자열 또는 "this"인 경우 현재 클래스에서 메서드 검색
+4. 노이즈 방지: `get*`, `set*`, `is*` 패턴 제외 옵션
+
+---
+
+### Issue #033: DAO → XML SQL ID 매칭 불일치
+
+**발생일**: 2026-01-15
+**상태**: 🟡 진행중
+
+#### 문제 상황
+일부 DAO 메서드에서 SQL ID가 추출되고, 일부는 안 됨:
+
+```java
+// ✅ 추적됨
+selectOne("bookFinder.getBookFinderInfo", param);
+
+// ❌ 추적 안 됨
+getSqlSession().selectOne("bookFinder.xxx", param);
+String sqlId = "bookFinder.xxx";
+selectOne(sqlId, param);
+```
+
+#### 원인 분석
+`JavaSourceParser.extractSqlId()` 함수의 제한적인 패턴 매칭:
+
+```java
+// JavaSourceParser.java:232-258
+private String extractSqlId(MethodCallExpr call) {
+    // 1. 특정 메서드명만 인식
+    List<String> sqlMethods = List.of(
+        "list", "selectList", "queryForList",
+        "select", "selectOne", "queryForObject",
+        "insert", "update", "delete"
+    );
+    if (!sqlMethods.contains(methodName)) {
+        return null;  // ← getSqlSession() 같은 체이닝은 스킵
+    }
+
+    // 2. 첫 번째 인자가 문자열 리터럴인 경우만
+    Expression firstArg = call.getArgument(0);
+    if (firstArg instanceof StringLiteralExpr) {  // ← 변수면 스킵
+        return ((StringLiteralExpr) firstArg).getValue();
+    }
+    return null;
+}
+```
+
+**한계점**:
+1. 메서드 체이닝 미지원: `getSqlSession().selectOne(...)`
+2. 변수 참조 미지원: `selectOne(sqlId, param)`
+3. 하드코딩된 메서드명 목록
+
+#### 해결 방안
+
+**방안 1: XML 기반 역매칭** ✅ 권장 (패턴 의존 제거)
+```java
+// 1단계: XML 파일에서 모든 SQL ID 수집
+Set<String> allSqlIds = xmlParser.getAllSqlIds();
+// 예: {"bookFinder.getBookFinderInfo", "use.selectOriginalDBStatus", ...}
+
+// 2단계: DAO 메서드의 모든 문자열 리터럴 추출
+for (StringLiteralExpr literal : method.findAll(StringLiteralExpr.class)) {
+    String value = literal.getValue();
+    // 3단계: SQL ID 목록에 존재하면 매칭
+    if (allSqlIds.contains(value)) {
+        return value;
+    }
+}
+```
+
+**장점**:
+- 메서드명에 의존하지 않음
+- 변수 문제 일부 해결 (인라인된 문자열은 찾을 수 있음)
+- XML에 정의된 실제 SQL만 매칭 (오탐 감소)
+
+**방안 2: 메서드 체이닝 지원 추가**
+```java
+// getSqlSession().selectOne(...) 패턴 인식
+if (call.getScope().map(Object::toString).orElse("").contains("getSqlSession")) {
+    // 내부 호출에서 SQL ID 추출
+}
+```
+
+**방안 3: 상수/필드 추적 (고급)**
+```java
+// 클래스 레벨 상수 수집
+private static final String SQL_ID = "bookFinder.xxx";
+
+// 메서드 내 지역 변수 추적 (제한적)
+String sqlId = "bookFinder.xxx";  // 이건 추적 어려움
+```
+
+#### 선택된 해결책: 방안 1 (XML 기반 역매칭)
+
+**구현 계획**:
+1. `XmlParser`에 `getAllSqlIds()` 메서드 추가 - 모든 namespace.id 수집
+2. `FlowAnalyzer.analyze()` 시작 시 SQL ID Set 미리 수집
+3. `JavaSourceParser.extractSqlId()` 개선 - 메서드 내 모든 문자열 리터럴 검사
+4. 문자열이 SQL ID Set에 존재하면 매칭 (메서드명 무관)
+
+**장점**:
+- 메서드 체이닝 `getSqlSession().selectOne(...)` 자동 지원
+- 하드코딩된 메서드명 목록 제거
+- XML에 존재하는 SQL만 매칭 (오탐 감소)
+
+---
+
 ## 참고 자료
 
 - [JavaParser 공식 문서](https://javaparser.org/)
