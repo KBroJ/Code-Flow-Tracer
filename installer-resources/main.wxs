@@ -75,31 +75,9 @@
 
     <!-- Standard required root -->
     <Directory Id="TARGETDIR" Name="SourceDir">
-      <!-- Registry cleanup component -->
-      <Component Id="RegistryCleanup" Guid="a1b2c3d4-e5f6-7890-abcd-ef1234567890">
-        <!-- Marker registry key (KeyPath required for Component) -->
-        <RegistryValue Root="HKCU"
-                       Key="Software\CFT"
-                       Name="Installed"
-                       Type="integer"
-                       Value="1"
-                       KeyPath="yes" />
-        <!-- Remove Java Preferences on uninstall -->
-        <RemoveRegistryKey Id="RemoveCFTPrefs"
-                           Root="HKCU"
-                           Key="Software\JavaSoft\Prefs\com\codeflow\ui"
-                           Action="removeOnUninstall" />
-        <RemoveRegistryKey Id="RemoveCFTPrefsParent"
-                           Root="HKCU"
-                           Key="Software\JavaSoft\Prefs\com\codeflow"
-                           Action="removeOnUninstall" />
-        <!-- Also remove our marker key -->
-        <RemoveRegistryKey Id="RemoveCFTMarker"
-                           Root="HKCU"
-                           Key="Software\CFT"
-                           Action="removeOnUninstall" />
-      </Component>
-
+      <!-- Note: Registry cleanup removed in Session 20 (2025-12-30)
+           Preferences API was replaced with JSON-based SessionManager.
+           All settings now stored in ~/.code-flow-tracer/session.json -->
     </Directory>
 
     <!-- Session folder cleanup via cmd.exe -->
@@ -113,7 +91,6 @@
       <ComponentGroupRef Id="Shortcuts"/>
       <ComponentGroupRef Id="Files"/>
       <ComponentGroupRef Id="FileAssociations"/>
-      <ComponentRef Id="RegistryCleanup"/>
     </Feature>
 
     <CustomAction Id="JpSetARPINSTALLLOCATION" Property="ARPINSTALLLOCATION" Value="[INSTALLDIR]" />

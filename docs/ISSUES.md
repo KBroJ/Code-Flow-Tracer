@@ -2654,6 +2654,109 @@ String sqlId = "bookFinder.xxx";  // 이건 추적 어려움
 
 ---
 
+### Issue #034: 대용량 프로젝트 분석 시 앱 멈춤 + 에러 핸들링 부재
+
+**발생일**: 2026-01-27
+**상태**: 🔴 신규
+
+#### 문제 상황
+실무 AS-IS 시스템 분석 시 "분석 실행" 버튼 클릭 후 앱이 멈춰버림 (Hang):
+- GUI가 응답 없음 상태로 전환
+- 진행 상황 표시 없음
+- 에러 메시지 없이 무한 대기
+- 강제 종료 외 방법 없음
+
+#### 현재 문제점
+
+**1. 타임아웃 없음**
+- 분석이 무한히 진행될 수 있음
+- 순환 참조나 무한 루프 시 탈출 불가
+
+**2. 에러 메시지 부재**
+- 예외 발생 시 사용자에게 알림 없음
+- SwingWorker 내부 예외가 숨겨짐
+
+**3. 에러 로깅 없음**
+- 디버깅을 위한 로그 파일 없음
+- 재현/분석 어려움
+
+#### 필요한 기능
+
+**1. 분석 타임아웃**
+```java
+// 일정 시간(예: 5분) 후 분석 중단
+ExecutorService executor = Executors.newSingleThreadExecutor();
+Future<?> future = executor.submit(() -> analyzer.analyze(...));
+try {
+    future.get(5, TimeUnit.MINUTES);
+} catch (TimeoutException e) {
+    future.cancel(true);
+    showErrorDialog("분석 시간이 초과되었습니다.");
+}
+```
+
+**2. 에러 다이얼로그**
+```java
+// SwingWorker.done()에서 예외 처리
+@Override
+protected void done() {
+    try {
+        get();  // 예외 발생 시 여기서 throw
+    } catch (Exception e) {
+        JOptionPane.showMessageDialog(
+            MainFrame.this,
+            "분석 중 오류 발생: " + e.getMessage(),
+            "오류",
+            JOptionPane.ERROR_MESSAGE
+        );
+        logger.error("Analysis failed", e);
+    }
+}
+```
+
+**3. 에러 로그 파일**
+```java
+// ~/.code-flow-tracer/logs/error.log
+// 또는 앱 실행 디렉토리에 cft-error.log
+
+Logger logger = LoggerFactory.getLogger(MainFrame.class);
+logger.error("Analysis failed for project: {}", projectPath, exception);
+```
+
+**4. 분석 취소 버튼**
+- 진행 중인 분석을 사용자가 직접 취소 가능
+- "분석 실행" 버튼 → "분석 취소"로 변경
+
+#### 해결 방안
+
+**단계 1: SwingWorker 예외 처리 강화**
+- `done()` 메서드에서 `get()` 호출하여 예외 캐치
+- 에러 다이얼로그 표시
+
+**단계 2: 타임아웃 구현**
+- `Future.get(timeout, unit)` 사용
+- 기본값 5분, 설정에서 변경 가능
+
+**단계 3: 로깅 시스템 도입**
+- SLF4J + Logback 또는 java.util.logging
+- 로그 레벨: INFO (진행 상황), ERROR (예외)
+- 로그 파일 위치: `~/.code-flow-tracer/logs/`
+
+**단계 4: 분석 취소 기능**
+- SwingWorker.cancel(true) 사용
+- 분석 중 isCancelled() 체크 포인트 추가
+
+#### 추정 원인 (디버깅 필요)
+
+| 가능성 | 원인 | 확인 방법 |
+|--------|------|----------|
+| 높음 | 대용량 파일/클래스 수 | 파일 수 로깅 |
+| 중간 | 순환 참조 무한 루프 | depth 제한 확인 |
+| 중간 | OutOfMemoryError | JVM 힙 설정 |
+| 낮음 | 스레드 데드락 | 스레드 덤프 |
+
+---
+
 ## 참고 자료
 
 - [JavaParser 공식 문서](https://javaparser.org/)
