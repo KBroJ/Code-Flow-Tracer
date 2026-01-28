@@ -10,6 +10,7 @@ import com.codeflow.parser.ParsedClass;
 import com.codeflow.parser.SqlInfo;
 import com.codeflow.session.SessionData;
 import com.codeflow.session.SessionManager;
+import com.codeflow.util.CftLogger;
 
 import com.formdev.flatlaf.FlatDarculaLaf;
 
@@ -21,6 +22,7 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.Desktop;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -131,6 +133,14 @@ public class MainFrame extends JFrame {
 
     // 세션 관리
     private final SessionManager sessionManager = new SessionManager();
+
+    // 로깅 및 에러 핸들링
+    private final CftLogger logger = CftLogger.getInstance();
+    private SwingWorker<FlowResult, String> currentWorker;  // 취소용 참조
+    private javax.swing.Timer analysisTimeoutTimer;          // 타임아웃 타이머
+    private boolean isAnalyzing = false;                     // 분석 중 상태
+    private long analysisStartTime;                          // 분석 시작 시간 (소요시간 계산용)
+    private static final int DEFAULT_TIMEOUT_MINUTES = 5;    // 기본 타임아웃 (5분)
 
     // 색상 상수
     private static final Color COLOR_SECTION_LABEL = new Color(78, 201, 176);  // 청록
@@ -758,10 +768,11 @@ public class MainFrame extends JFrame {
         // 엑셀 저장 버튼
         exportExcelButton.addActionListener(this::handleExportExcel);
 
-        // 설정 버튼
-        JPopupMenu settingsPopup = createSettingsPopupMenu();
-        settingsButton.addActionListener(e ->
-            settingsPopup.show(settingsButton, 0, settingsButton.getHeight()));
+        // 설정 버튼 (클릭할 때마다 메뉴 새로 생성 - 로그 크기 등 현재 상태 반영)
+        settingsButton.addActionListener(e -> {
+            JPopupMenu settingsPopup = createSettingsPopupMenu();
+            settingsPopup.show(settingsButton, 0, settingsButton.getHeight());
+        });
 
         // Enter 키로 분석 시작
         JTextField comboEditor = (JTextField) projectPathComboBox.getEditor().getEditorComponent();
@@ -854,12 +865,135 @@ public class MainFrame extends JFrame {
     private JPopupMenu createSettingsPopupMenu() {
         JPopupMenu popup = new JPopupMenu();
 
+        // 로그 폴더 열기
+        JMenuItem openLogFolderItem = new JMenuItem("로그 폴더 열기");
+        openLogFolderItem.setToolTipText("로그 파일이 저장된 폴더를 엽니다");
+        openLogFolderItem.addActionListener(e -> handleOpenLogFolder());
+        popup.add(openLogFolderItem);
+
+        // 로그 크기 설정 서브메뉴
+        JMenu logSizeMenu = new JMenu("로그 크기 설정");
+        logSizeMenu.setToolTipText("로그 파일 최대 크기를 설정합니다");
+
+        ButtonGroup logSizeGroup = new ButtonGroup();
+        int currentSize = logger.getLogSizeMB();
+
+        JRadioButtonMenuItem size1MB = new JRadioButtonMenuItem("1MB (최대 3MB)");
+        size1MB.setSelected(currentSize == 1);
+        size1MB.addActionListener(e -> handleLogSizeChange(1));
+        logSizeGroup.add(size1MB);
+        logSizeMenu.add(size1MB);
+
+        JRadioButtonMenuItem size5MB = new JRadioButtonMenuItem("5MB (최대 15MB) - 기본");
+        size5MB.setSelected(currentSize == 5);
+        size5MB.addActionListener(e -> handleLogSizeChange(5));
+        logSizeGroup.add(size5MB);
+        logSizeMenu.add(size5MB);
+
+        JRadioButtonMenuItem size10MB = new JRadioButtonMenuItem("10MB (최대 30MB)");
+        size10MB.setSelected(currentSize == 10);
+        size10MB.addActionListener(e -> handleLogSizeChange(10));
+        logSizeGroup.add(size10MB);
+        logSizeMenu.add(size10MB);
+
+        popup.add(logSizeMenu);
+
+        // 로그 파일 삭제
+        JMenuItem clearLogItem = new JMenuItem("로그 파일 삭제");
+        clearLogItem.setToolTipText("모든 로그 파일을 삭제합니다");
+        clearLogItem.addActionListener(e -> handleClearLogs());
+        popup.add(clearLogItem);
+
+        popup.addSeparator();
+
+        // 설정/세션 초기화
         JMenuItem clearAllItem = new JMenuItem("설정/세션 초기화");
         clearAllItem.setToolTipText("저장된 모든 설정 및 분석 결과를 삭제합니다");
         clearAllItem.addActionListener(e -> handleClearAll());
         popup.add(clearAllItem);
 
         return popup;
+    }
+
+    /**
+     * 로그 폴더 열기 핸들러
+     */
+    private void handleOpenLogFolder() {
+        try {
+            Path logFolder = logger.getLogFolder();
+            if (!Files.exists(logFolder)) {
+                Files.createDirectories(logFolder);
+            }
+            Desktop.getDesktop().open(logFolder.toFile());
+        } catch (IOException ex) {
+            showError("로그 폴더를 열 수 없습니다: " + ex.getMessage());
+        } catch (UnsupportedOperationException ex) {
+            showError("이 시스템에서는 폴더 열기가 지원되지 않습니다.");
+        }
+    }
+
+    /**
+     * 로그 크기 변경 핸들러
+     */
+    private void handleLogSizeChange(int sizeMB) {
+        logger.setLogSizeMB(sizeMB);
+
+        // 세션에 저장
+        SessionData settings = sessionManager.loadSettings();
+        if (settings == null) {
+            settings = new SessionData();
+        }
+        settings.setLogSizeMB(sizeMB);
+        sessionManager.saveSession(settings);
+
+        statusLabel.setText(String.format("로그 크기 설정: %dMB (최대 %dMB)", sizeMB, sizeMB * 3));
+    }
+
+    /**
+     * 로그 파일 삭제 핸들러
+     */
+    private void handleClearLogs() {
+        int confirm = JOptionPane.showConfirmDialog(
+                this,
+                "모든 로그 파일을 삭제합니다.\n계속하시겠습니까?",
+                "로그 파일 삭제",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE
+        );
+
+        if (confirm == JOptionPane.YES_OPTION) {
+            try {
+                // 파일 잠금 해제를 위해 핸들러 닫기
+                logger.closeHandlers();
+
+                Path logFolder = logger.getLogFolder();
+                if (Files.exists(logFolder)) {
+                    Files.list(logFolder)
+                            .filter(Files::isRegularFile)
+                            .forEach(file -> {
+                                try {
+                                    Files.delete(file);
+                                } catch (IOException e) {
+                                    // 삭제 실패 무시
+                                }
+                            });
+                }
+
+                // 로거는 닫힌 상태 유지 (다음 로그 이벤트 시 ensureInitialized()로 자동 재시작)
+                // 여기서 logger.info()를 호출하면 새 FileHandler가 즉시 생성되어
+                // cft.log.0이 다시 만들어지므로 호출하지 않음
+
+                statusLabel.setText("로그 파일이 삭제되었습니다.");
+                JOptionPane.showMessageDialog(
+                        this,
+                        "로그 파일이 삭제되었습니다.",
+                        "완료",
+                        JOptionPane.INFORMATION_MESSAGE
+                );
+            } catch (IOException e) {
+                showError("로그 파일 삭제 실패: " + e.getMessage());
+            }
+        }
     }
 
     /**
@@ -963,9 +1097,18 @@ public class MainFrame extends JFrame {
     }
 
     /**
-     * 분석 시작 핸들러
+     * 분석 시작/취소 핸들러 (토글)
+     *
+     * <p>분석 중이면 취소, 아니면 시작</p>
      */
     private void handleAnalyze(ActionEvent e) {
+        // 분석 중이면 취소
+        if (isAnalyzing) {
+            cancelAnalysis();
+            return;
+        }
+
+        // 분석 시작 전 검증
         String pathStr = getSelectedProjectPath();
         if (pathStr.isEmpty()) {
             showError("프로젝트 경로를 입력하세요.");
@@ -988,12 +1131,65 @@ public class MainFrame extends JFrame {
     }
 
     /**
+     * 분석 취소
+     */
+    private void cancelAnalysis() {
+        if (currentWorker != null && !currentWorker.isDone()) {
+            currentWorker.cancel(true);
+            logger.logAnalysisCancelled();
+        }
+        if (analysisTimeoutTimer != null) {
+            analysisTimeoutTimer.stop();
+        }
+        setAnalyzingState(false);
+        statusLabel.setText("분석 취소됨");
+        progressBar.setString("취소됨");
+        progressBar.setIndeterminate(false);
+    }
+
+    /**
+     * 분석 중 상태 설정
+     * - 버튼 텍스트 변경 (분석 실행 ↔ 분석 취소)
+     * - UI 활성화/비활성화
+     */
+    private void setAnalyzingState(boolean analyzing) {
+        isAnalyzing = analyzing;
+        if (analyzing) {
+            analyzeButton.setText("■ 분석 취소");
+            analyzeButton.setBackground(new Color(180, 80, 80));  // 빨간색 계열
+        } else {
+            analyzeButton.setText("▶ 분석 실행");
+            analyzeButton.setBackground(new Color(70, 130, 180));  // 원래 색상
+        }
+        // 분석 중에는 다른 설정 비활성화
+        projectPathComboBox.setEnabled(!analyzing);
+        browseButton.setEnabled(!analyzing);
+        urlFilterField.setEnabled(!analyzing);
+        exportExcelButton.setEnabled(!analyzing && currentResult != null);
+    }
+
+    /**
      * 백그라운드에서 분석 실행
+     *
+     * 개선된 에러 핸들링:
+     * - 타임아웃: 기본 5분 후 자동 취소
+     * - 취소 지원: 분석 중 사용자가 취소 가능
+     * - 로깅: 시작/완료/에러 모두 로그 파일에 기록
+     * - 진행 상황: 현재 단계를 상세히 표시
      */
     private void startAnalysis(Path projectPath) {
         String urlPattern = urlFilterField.getText().trim();
 
-        setUIEnabled(false);
+        // 분석 상태 설정 (버튼 텍스트 변경 등)
+        setAnalyzingState(true);
+        analysisStartTime = System.currentTimeMillis();
+
+        // 로깅: 분석 시작
+        logger.logAnalysisStart(projectPath);
+        if (urlPattern != null && !urlPattern.isEmpty()) {
+            logger.info("URL 필터: %s", urlPattern);
+        }
+
         progressBar.setIndeterminate(true);
         progressBar.setString("분석 중...");
         statusLabel.setText("프로젝트를 분석하고 있습니다...");
@@ -1007,18 +1203,38 @@ public class MainFrame extends JFrame {
         lblDaoCount.setText("-");
         lblEndpointCount.setText("-");
 
-        SwingWorker<FlowResult, String> worker = new SwingWorker<>() {
+        // 타임아웃 타이머 설정 (기본 5분)
+        setupTimeoutTimer();
+
+        currentWorker = new SwingWorker<>() {
             @Override
             protected FlowResult doInBackground() throws Exception {
+                // 1단계: Java 소스 파싱
                 publish("Java 소스 파싱 중...");
+                logger.info("1/3 단계: Java 소스 파싱 시작");
+
+                if (isCancelled()) return null;  // 취소 체크
+
                 JavaSourceParser parser = new JavaSourceParser();
                 List<ParsedClass> parsedClasses = parser.parseProject(projectPath);
+                logger.info("Java 파싱 완료: %d개 클래스", parsedClasses.size());
 
+                if (isCancelled()) return null;  // 취소 체크
+
+                // 2단계: iBatis/MyBatis XML 파싱
                 publish("iBatis/MyBatis XML 파싱 중...");
+                logger.info("2/3 단계: XML 파싱 시작");
+
                 IBatisParser ibatisParser = new IBatisParser();
                 Map<String, SqlInfo> sqlInfoMap = ibatisParser.parseProject(projectPath);
+                logger.info("XML 파싱 완료: %d개 SQL", sqlInfoMap.size());
 
+                if (isCancelled()) return null;  // 취소 체크
+
+                // 3단계: 호출 흐름 분석
                 publish("호출 흐름 분석 중...");
+                logger.info("3/3 단계: 호출 흐름 분석 시작");
+
                 FlowAnalyzer analyzer = new FlowAnalyzer();
                 analyzer.setSqlInfoMap(sqlInfoMap);
 
@@ -1029,6 +1245,8 @@ public class MainFrame extends JFrame {
                     result = analyzer.analyze(projectPath, parsedClasses);
                 }
 
+                logger.info("분석 완료: %d개 엔드포인트", result.getFlows().size());
+
                 // 원본 결과 반환 (CRUD 필터링은 UI에서 실시간 적용)
                 return result;
             }
@@ -1036,14 +1254,35 @@ public class MainFrame extends JFrame {
             @Override
             protected void process(List<String> chunks) {
                 if (!chunks.isEmpty()) {
-                    statusLabel.setText(chunks.get(chunks.size() - 1));
+                    String message = chunks.get(chunks.size() - 1);
+                    statusLabel.setText(message);
+                    logger.debug("진행: %s", message);
                 }
             }
 
             @Override
             protected void done() {
+                // 타임아웃 타이머 정지
+                if (analysisTimeoutTimer != null) {
+                    analysisTimeoutTimer.stop();
+                }
+
+                long elapsedMillis = System.currentTimeMillis() - analysisStartTime;
+
                 try {
+                    // 취소된 경우
+                    if (isCancelled()) {
+                        statusLabel.setText("분석 취소됨");
+                        progressBar.setString("취소됨");
+                        return;
+                    }
+
                     FlowResult result = get();
+                    if (result == null) {
+                        // 취소로 인한 null
+                        return;
+                    }
+
                     originalResult = result;  // 원본 저장
                     currentProjectPath = projectPath;
 
@@ -1080,13 +1319,13 @@ public class MainFrame extends JFrame {
                     int totalCount = originalResult.getFlows().size();
                     int shownCount = currentResult.getFlows().size();
                     if (totalCount == shownCount) {
-                        statusLabel.setText(String.format("분석 완료: %d개 URL 발견", totalCount));
+                        statusLabel.setText(String.format("분석 완료: %d개 URL 발견 (%.1f초)",
+                            totalCount, elapsedMillis / 1000.0));
                     } else {
-                        statusLabel.setText(String.format("분석 완료: %d / %d개 URL (필터 적용)", shownCount, totalCount));
+                        statusLabel.setText(String.format("분석 완료: %d / %d개 URL (%.1f초)",
+                            shownCount, totalCount, elapsedMillis / 1000.0));
                     }
                     progressBar.setString("완료");
-
-                    exportExcelButton.setEnabled(true);
 
                     // 설정 저장
                     saveRecentPath(projectPath.toString());
@@ -1095,19 +1334,94 @@ public class MainFrame extends JFrame {
                     // 세션 저장 (분석 결과 영속성 - 원본 저장)
                     saveSession();
 
+                    // 로깅: 분석 완료
+                    logger.logAnalysisComplete(totalCount, elapsedMillis);
+
+                } catch (java.util.concurrent.CancellationException ex) {
+                    // 취소된 경우 (정상)
+                    statusLabel.setText("분석 취소됨");
+                    progressBar.setString("취소됨");
+                    logger.logAnalysisCancelled();
+
                 } catch (Exception ex) {
-                    String errorMsg = ex.getCause() != null ? ex.getCause().getMessage() : ex.getMessage();
-                    showError("분석 중 오류 발생: " + errorMsg);
-                    statusLabel.setText("분석 실패");
+                    // 에러 발생
+                    Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
+                    String errorMsg = cause.getMessage();
+                    if (errorMsg == null || errorMsg.isEmpty()) {
+                        errorMsg = cause.getClass().getSimpleName();
+                    }
+
+                    // 로깅: 에러 기록 (스택트레이스 포함)
+                    logger.logAnalysisError(cause);
+
+                    // 사용자에게 에러 표시 + 로그 경로 안내
+                    String userMessage = String.format(
+                        "분석 중 오류 발생: %s\n\n상세 로그: %s",
+                        errorMsg,
+                        logger.getLogPath()
+                    );
+                    showError(userMessage);
+
+                    statusLabel.setText("분석 실패 - 로그 확인");
                     progressBar.setString("오류");
+
                 } finally {
-                    setUIEnabled(true);
+                    setAnalyzingState(false);
                     progressBar.setIndeterminate(false);
                 }
             }
         };
 
-        worker.execute();
+        currentWorker.execute();
+    }
+
+    /**
+     * 분석 타임아웃 타이머 설정
+     *
+     * 설계 결정: javax.swing.Timer 사용
+     * - Swing Timer는 EDT에서 실행되어 UI 업데이트 안전
+     * - java.util.Timer보다 Swing 앱에 적합
+     * - 타임아웃 시 SwingWorker.cancel(true) 호출
+     */
+    private void setupTimeoutTimer() {
+        // 기존 타이머 정지
+        if (analysisTimeoutTimer != null) {
+            analysisTimeoutTimer.stop();
+        }
+
+        int timeoutMillis = DEFAULT_TIMEOUT_MINUTES * 60 * 1000;
+
+        analysisTimeoutTimer = new javax.swing.Timer(timeoutMillis, e -> {
+            if (currentWorker != null && !currentWorker.isDone()) {
+                // 타임아웃 발생
+                logger.logAnalysisTimeout(DEFAULT_TIMEOUT_MINUTES);
+                currentWorker.cancel(true);
+
+                // UI 업데이트 (EDT에서 실행되므로 안전)
+                setAnalyzingState(false);
+                progressBar.setIndeterminate(false);
+                progressBar.setString("타임아웃");
+                statusLabel.setText(String.format("분석 시간 초과 (%d분)", DEFAULT_TIMEOUT_MINUTES));
+
+                // 사용자에게 알림
+                showError(String.format(
+                    "분석 시간이 %d분을 초과하여 자동으로 취소되었습니다.\n\n" +
+                    "원인:\n" +
+                    "- 프로젝트 규모가 너무 큼\n" +
+                    "- 순환 참조 또는 무한 루프\n\n" +
+                    "해결 방법:\n" +
+                    "- URL 필터로 범위 축소\n" +
+                    "- 로그 파일 확인: %s",
+                    DEFAULT_TIMEOUT_MINUTES,
+                    logger.getLogPath()
+                ));
+            }
+        });
+
+        analysisTimeoutTimer.setRepeats(false);  // 한 번만 실행
+        analysisTimeoutTimer.start();
+
+        logger.info("타임아웃 타이머 설정: %d분", DEFAULT_TIMEOUT_MINUTES);
     }
 
     /**
@@ -1270,6 +1584,12 @@ public class MainFrame extends JFrame {
             cbInsert.setSelected(true);
             cbUpdate.setSelected(true);
             cbDelete.setSelected(true);
+        }
+
+        // 로그 크기 설정
+        int logSizeMB = settings.getLogSizeMB();
+        if (logSizeMB > 0) {
+            logger.setLogSizeMB(logSizeMB);
         }
     }
 

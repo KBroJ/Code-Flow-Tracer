@@ -27,6 +27,7 @@ public class SessionData {
     private String selectedTable;         // 선택된 테이블명 (테이블 영향도 탭)
     private boolean tableDetailViewActive; // 쿼리 상세 화면 활성화 여부 (테이블 영향도 탭)
     private int selectedQueryRowIndex = -1; // 선택된 쿼리 행 인덱스 (테이블 영향도 탭, -1은 전체 쿼리)
+    private int logSizeMB = 5;             // 로그 파일 크기 설정 (MB, 기본 5MB)
 
     public SessionData() {
     }
@@ -140,6 +141,14 @@ public class SessionData {
 
     public void setSelectedQueryRowIndex(int selectedQueryRowIndex) {
         this.selectedQueryRowIndex = selectedQueryRowIndex;
+    }
+
+    public int getLogSizeMB() {
+        return logSizeMB;
+    }
+
+    public void setLogSizeMB(int logSizeMB) {
+        this.logSizeMB = logSizeMB;
     }
 
     /**

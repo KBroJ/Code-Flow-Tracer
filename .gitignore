@@ -39,6 +39,13 @@ study/
 # Blog drafts (not for git)
 docs/blog/
 
+# Playwright MCP
+.playwright-mcp/
+
+# Personal documents (not for git)
+docs/toss/
+error/
+
 # Windows reserved name (artifact)
 nul
 tmpclaude-*

@@ -187,6 +187,67 @@ class SessionDataTest {
         assertFalse(data.getAnalyzedAt().isAfter(after), "현재 시간 이전이어야 함");
     }
 
+    // ==================== logSizeMB 테스트 ====================
+
+    @Test
+    @DisplayName("logSizeMB 기본값 - 5MB")
+    void testLogSizeMB_DefaultValue() {
+        // Given
+        SessionData data = new SessionData();
+
+        // When & Then
+        assertEquals(5, data.getLogSizeMB(), "기본 로그 크기는 5MB");
+    }
+
+    @Test
+    @DisplayName("logSizeMB Getter/Setter")
+    void testLogSizeMB_GetterSetter() {
+        // Given
+        SessionData data = new SessionData();
+
+        // When
+        data.setLogSizeMB(10);
+
+        // Then
+        assertEquals(10, data.getLogSizeMB(), "설정한 값으로 변경되어야 함");
+    }
+
+    @Test
+    @DisplayName("logSizeMB 1MB 설정")
+    void testLogSizeMB_1MB() {
+        // Given
+        SessionData data = new SessionData();
+
+        // When
+        data.setLogSizeMB(1);
+
+        // Then
+        assertEquals(1, data.getLogSizeMB());
+    }
+
+    @Test
+    @DisplayName("logSizeMB 10MB 설정")
+    void testLogSizeMB_10MB() {
+        // Given
+        SessionData data = new SessionData();
+
+        // When
+        data.setLogSizeMB(10);
+
+        // Then
+        assertEquals(10, data.getLogSizeMB());
+    }
+
+    @Test
+    @DisplayName("logSizeMB - 파라미터 생성자에서 기본값 유지")
+    void testLogSizeMB_ParameterizedConstructor() {
+        // Given & When
+        SessionData data = new SessionData("C:/test", createTestFlowResult());
+
+        // Then
+        assertEquals(5, data.getLogSizeMB(), "파라미터 생성자에서도 기본값 5MB");
+    }
+
     /**
      * 테스트용 FlowResult 생성
      */
