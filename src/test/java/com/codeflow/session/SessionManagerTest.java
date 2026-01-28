@@ -229,6 +229,90 @@ class SessionManagerTest {
         assertEquals("UserDAO", loadedChild2.getClassName());
     }
 
+    // ==================== logSizeMB 테스트 ====================
+
+    @Test
+    @DisplayName("logSizeMB 저장/로드 - 기본값 5MB")
+    void testLogSizeMB_DefaultValue() {
+        // Given: 로그 크기 설정하지 않은 세션 데이터
+        SessionData data = createTestSessionData();
+
+        // When: 저장 후 로드
+        sessionManager.saveSession(data);
+        SessionData loaded = sessionManager.loadSession();
+
+        // Then: 기본값 5MB
+        assertNotNull(loaded);
+        assertEquals(5, loaded.getLogSizeMB(), "기본 로그 크기 5MB");
+    }
+
+    @Test
+    @DisplayName("logSizeMB 저장/로드 - 커스텀 값")
+    void testLogSizeMB_CustomValue() {
+        // Given: 로그 크기 10MB로 설정
+        SessionData data = createTestSessionData();
+        data.setLogSizeMB(10);
+
+        // When: 저장 후 로드
+        sessionManager.saveSession(data);
+        SessionData loaded = sessionManager.loadSession();
+
+        // Then: 설정한 값 유지
+        assertNotNull(loaded);
+        assertEquals(10, loaded.getLogSizeMB(), "설정한 로그 크기 10MB");
+    }
+
+    @Test
+    @DisplayName("logSizeMB 저장/로드 - 1MB 설정")
+    void testLogSizeMB_1MB() {
+        // Given
+        SessionData data = createTestSessionData();
+        data.setLogSizeMB(1);
+
+        // When
+        sessionManager.saveSession(data);
+        SessionData loaded = sessionManager.loadSession();
+
+        // Then
+        assertEquals(1, loaded.getLogSizeMB());
+    }
+
+    @Test
+    @DisplayName("logSizeMB - 기존 세션에서 설정 유지")
+    void testLogSizeMB_PreservedOnSessionSave() {
+        // Given: 로그 크기 10MB로 설정 후 저장
+        SessionData data = createTestSessionData();
+        data.setLogSizeMB(10);
+        sessionManager.saveSession(data);
+
+        // When: 새 세션 저장 (오버로드 메서드 사용)
+        sessionManager.saveSession("C:/new/project", createTestFlowResult(), "/api/*", "normal");
+
+        // Then: 로그 크기 설정이 유지되어야 함
+        SessionData loaded = sessionManager.loadSession();
+        assertNotNull(loaded);
+        assertEquals(10, loaded.getLogSizeMB(), "기존 로그 크기 설정이 유지되어야 함");
+    }
+
+    @Test
+    @DisplayName("logSizeMB - saveSettings에서 유지")
+    void testLogSizeMB_PreservedOnSaveSettings() {
+        // Given: 로그 크기 10MB로 설정 후 저장
+        SessionData data = createTestSessionData();
+        data.setLogSizeMB(10);
+        sessionManager.saveSession(data);
+
+        // When: 설정만 저장
+        List<String> recentPaths = new ArrayList<>();
+        recentPaths.add("C:/new/path");
+        sessionManager.saveSettings(recentPaths, "/api/*", "detailed", null, null);
+
+        // Then: 로그 크기 설정이 유지되어야 함
+        SessionData loaded = sessionManager.loadSettings();
+        assertNotNull(loaded);
+        assertEquals(10, loaded.getLogSizeMB(), "saveSettings 후에도 로그 크기 유지");
+    }
+
     /**
      * 테스트용 SessionData 생성
      */

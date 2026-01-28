@@ -97,6 +97,9 @@ com.codeflow/
 │   ├── SessionManager.java   # 세션 저장/로드/삭제
 │   └── SessionData.java      # 세션 데이터 (JSON 직렬화)
 │
+├── util/                     # 유틸리티
+│   └── CftLogger.java        # 로깅 시스템 (java.util.logging 기반, 싱글톤)
+│
 └── ui/                       # GUI
     ├── MainFrame.java        # 메인 윈도우
     └── ResultPanel.java      # 결과 표시 패널

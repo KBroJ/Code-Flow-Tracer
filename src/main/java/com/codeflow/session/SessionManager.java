@@ -1,13 +1,12 @@
 package com.codeflow.session;
 
 import com.codeflow.analyzer.FlowResult;
+import com.codeflow.util.CftLogger;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.TypeAdapter;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -25,7 +24,7 @@ import java.time.format.DateTimeFormatter;
  */
 public class SessionManager {
 
-    private static final Logger log = LoggerFactory.getLogger(SessionManager.class);
+    private static final CftLogger log = CftLogger.getInstance();
 
     // 세션 파일 경로: ~/.code-flow-tracer/session.json
     private static final Path SESSION_DIR = Paths.get(
@@ -64,20 +63,20 @@ public class SessionManager {
             // 디렉토리 생성
             if (!Files.exists(SESSION_DIR)) {
                 Files.createDirectories(SESSION_DIR);
-                log.info("세션 디렉토리 생성: {}", SESSION_DIR);
+                log.info("세션 디렉토리 생성: %s", SESSION_DIR);
             }
 
             // JSON으로 직렬화 및 저장
             String json = gson.toJson(data);
             Files.writeString(SESSION_FILE, json, StandardCharsets.UTF_8);
 
-            log.info("세션 저장 완료: {} ({} flows)",
+            log.info("세션 저장 완료: %s (%d flows)",
                     SESSION_FILE,
                     data.getFlowResult() != null ? data.getFlowResult().getFlows().size() : 0);
             return true;
 
         } catch (IOException e) {
-            log.error("세션 저장 실패: {}", e.getMessage(), e);
+            log.error("세션 저장 실패: " + e.getMessage(), e);
             return false;
         }
     }
@@ -89,7 +88,7 @@ public class SessionManager {
      */
     public SessionData loadSession() {
         if (!Files.exists(SESSION_FILE)) {
-            log.debug("세션 파일 없음: {}", SESSION_FILE);
+            log.debug("세션 파일 없음: %s", SESSION_FILE);
             return null;
         }
 
@@ -98,7 +97,7 @@ public class SessionManager {
             SessionData data = gson.fromJson(json, SessionData.class);
 
             if (data != null && data.isValid()) {
-                log.info("세션 로드 완료: {} ({} flows)",
+                log.info("세션 로드 완료: %s (%d flows)",
                         data.getProjectPath(),
                         data.getFlowResult().getFlows().size());
                 return data;
@@ -108,7 +107,7 @@ public class SessionManager {
             }
 
         } catch (Exception e) {
-            log.error("세션 로드 실패: {}", e.getMessage(), e);
+            log.error("세션 로드 실패: " + e.getMessage(), e);
             return null;
         }
     }
@@ -120,7 +119,7 @@ public class SessionManager {
      */
     public SessionData loadSettings() {
         if (!Files.exists(SESSION_FILE)) {
-            log.debug("세션 파일 없음: {}", SESSION_FILE);
+            log.debug("세션 파일 없음: %s", SESSION_FILE);
             return null;
         }
 
@@ -136,7 +135,7 @@ public class SessionManager {
             }
 
         } catch (Exception e) {
-            log.error("설정 로드 실패: {}", e.getMessage(), e);
+            log.error("설정 로드 실패: " + e.getMessage(), e);
             return null;
         }
     }
@@ -146,17 +145,16 @@ public class SessionManager {
      */
     public boolean saveSettings(java.util.List<String> recentPaths, String urlFilter,
                                 String outputStyle, String endpointFilter, java.util.List<String> sqlTypeFilter) {
-        // 기존 세션 로드 (분석 결과 유지를 위해)
-        SessionData data = loadSettings();
-        if (data == null) {
-            data = new SessionData();
-        }
+        // 기존 세션 로드 (분석 결과, 로그 크기 설정 유지를 위해)
+        SessionData existing = loadSettings();
+        SessionData data = (existing != null) ? existing : new SessionData();
 
         data.setRecentPaths(recentPaths);
         data.setUrlFilter(urlFilter);
         data.setOutputStyle(outputStyle);
         data.setEndpointFilter(endpointFilter);
         data.setSqlTypeFilter(sqlTypeFilter);
+        // logSizeMB는 기존 값 유지 (existing에서 이미 로드됨)
 
         return saveSession(data);
     }
@@ -170,11 +168,11 @@ public class SessionManager {
         try {
             if (Files.exists(SESSION_FILE)) {
                 Files.delete(SESSION_FILE);
-                log.info("세션 삭제 완료: {}", SESSION_FILE);
+                log.info("세션 삭제 완료: %s", SESSION_FILE);
             }
             return true;
         } catch (IOException e) {
-            log.error("세션 삭제 실패: {}", e.getMessage(), e);
+            log.error("세션 삭제 실패: " + e.getMessage(), e);
             return false;
         }
     }
@@ -227,6 +225,10 @@ public class SessionManager {
             }
             if (existing.getEndpointFilter() != null) {
                 data.setEndpointFilter(existing.getEndpointFilter());
+            }
+            // 로그 크기 설정 유지
+            if (existing.getLogSizeMB() > 0) {
+                data.setLogSizeMB(existing.getLogSizeMB());
             }
         }
 

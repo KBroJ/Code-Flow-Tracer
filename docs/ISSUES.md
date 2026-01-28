@@ -2657,7 +2657,8 @@ String sqlId = "bookFinder.xxx";  // 이건 추적 어려움
 ### Issue #034: 대용량 프로젝트 분석 시 앱 멈춤 + 에러 핸들링 부재
 
 **발생일**: 2026-01-27
-**상태**: 🔴 신규
+**해결일**: 2026-01-28
+**상태**: 🟢 해결됨
 
 #### 문제 상황
 실무 AS-IS 시스템 분석 시 "분석 실행" 버튼 클릭 후 앱이 멈춰버림 (Hang):
@@ -2666,94 +2667,273 @@ String sqlId = "bookFinder.xxx";  // 이건 추적 어려움
 - 에러 메시지 없이 무한 대기
 - 강제 종료 외 방법 없음
 
-#### 현재 문제점
+#### 근본 원인 분석
 
-**1. 타임아웃 없음**
-- 분석이 무한히 진행될 수 있음
-- 순환 참조나 무한 루프 시 탈출 불가
+| 문제점 | 설명 |
+|--------|------|
+| 타임아웃 없음 | 분석이 무한히 진행될 수 있음 |
+| 에러 메시지 부재 | SwingWorker 내부 예외가 숨겨짐 |
+| 에러 로깅 없음 | 디버깅을 위한 로그 파일 없음 |
+| 취소 불가 | 사용자가 분석을 중단할 수 없음 |
 
-**2. 에러 메시지 부재**
-- 예외 발생 시 사용자에게 알림 없음
-- SwingWorker 내부 예외가 숨겨짐
+#### 최종 해결 (Session 33-34)
 
-**3. 에러 로깅 없음**
-- 디버깅을 위한 로그 파일 없음
-- 재현/분석 어려움
+**1. 로깅 시스템 구현 (`CftLogger.java` 신규)**
 
-#### 필요한 기능
-
-**1. 분석 타임아웃**
 ```java
-// 일정 시간(예: 5분) 후 분석 중단
-ExecutorService executor = Executors.newSingleThreadExecutor();
-Future<?> future = executor.submit(() -> analyzer.analyze(...));
-try {
-    future.get(5, TimeUnit.MINUTES);
-} catch (TimeoutException e) {
-    future.cancel(true);
-    showErrorDialog("분석 시간이 초과되었습니다.");
-}
-```
+// 설계 결정: SLF4J 대신 java.util.logging 선택
+// 이유: 폐쇄망 환경에서 추가 JAR 배포 불필요 (JDK 내장)
+public class CftLogger {
+    private static CftLogger instance;  // 싱글톤
+    private final Logger logger;
 
-**2. 에러 다이얼로그**
-```java
-// SwingWorker.done()에서 예외 처리
-@Override
-protected void done() {
-    try {
-        get();  // 예외 발생 시 여기서 throw
-    } catch (Exception e) {
-        JOptionPane.showMessageDialog(
-            MainFrame.this,
-            "분석 중 오류 발생: " + e.getMessage(),
-            "오류",
-            JOptionPane.ERROR_MESSAGE
-        );
-        logger.error("Analysis failed", e);
+    // 로그 경로: ~/.code-flow-tracer/logs/cft.log
+    // 로테이션: 설정 크기(1/5/10MB) × 3개 파일
+    private void initialize() {
+        FileHandler fileHandler = new FileHandler(
+            logFilePath.toString(), logSizeBytes, MAX_LOG_COUNT, true);
+        fileHandler.setFormatter(new CftLogFormatter());
+        // ...
     }
 }
 ```
 
-**3. 에러 로그 파일**
-```java
-// ~/.code-flow-tracer/logs/error.log
-// 또는 앱 실행 디렉토리에 cft-error.log
+- 로그 레벨: INFO(진행 상황), WARNING(경고), SEVERE(에러), FINE(디버그)
+- 커스텀 포맷: `[2026-01-28 14:30:45] [INFO] 메시지`
+- 분석 시작/완료/실패/취소/타임아웃 전용 로그 메서드 제공
 
-Logger logger = LoggerFactory.getLogger(MainFrame.class);
-logger.error("Analysis failed for project: {}", projectPath, exception);
+**2. 분석 취소 버튼 (토글 방식)**
+
+```java
+// 분석 전: [▶ 분석 실행] (파란색)
+// 분석 중: [■ 분석 취소] (빨간색)
+analyzeButton.addActionListener(e -> {
+    if (isAnalyzing) {
+        analysisWorker.cancel(true);  // 취소
+    } else {
+        startAnalysis();  // 시작
+    }
+});
 ```
 
-**4. 분석 취소 버튼**
-- 진행 중인 분석을 사용자가 직접 취소 가능
-- "분석 실행" 버튼 → "분석 취소"로 변경
-
-#### 해결 방안
-
-**단계 1: SwingWorker 예외 처리 강화**
-- `done()` 메서드에서 `get()` 호출하여 예외 캐치
-- 에러 다이얼로그 표시
-
-**단계 2: 타임아웃 구현**
-- `Future.get(timeout, unit)` 사용
-- 기본값 5분, 설정에서 변경 가능
-
-**단계 3: 로깅 시스템 도입**
-- SLF4J + Logback 또는 java.util.logging
-- 로그 레벨: INFO (진행 상황), ERROR (예외)
-- 로그 파일 위치: `~/.code-flow-tracer/logs/`
-
-**단계 4: 분석 취소 기능**
 - SwingWorker.cancel(true) 사용
-- 분석 중 isCancelled() 체크 포인트 추가
+- isCancelled() 체크 포인트 3곳 (파싱/분석/출력 단계)
 
-#### 추정 원인 (디버깅 필요)
+**3. 분석 타임아웃 (기본 5분)**
 
-| 가능성 | 원인 | 확인 방법 |
-|--------|------|----------|
-| 높음 | 대용량 파일/클래스 수 | 파일 수 로깅 |
-| 중간 | 순환 참조 무한 루프 | depth 제한 확인 |
-| 중간 | OutOfMemoryError | JVM 힙 설정 |
-| 낮음 | 스레드 데드락 | 스레드 덤프 |
+```java
+// javax.swing.Timer 사용 (EDT 안전)
+analysisTimer = new Timer(TIMEOUT_MINUTES * 60 * 1000, e -> {
+    if (analysisWorker != null && !analysisWorker.isDone()) {
+        analysisWorker.cancel(true);
+        log.logAnalysisTimeout(TIMEOUT_MINUTES);
+        showErrorWithLogPath("분석 시간이 초과되었습니다.");
+    }
+});
+```
+
+- 선택 이유: `javax.swing.Timer`는 EDT에서 콜백 → UI 조작 안전
+- `java.util.Timer`나 `ScheduledExecutor`는 별도 스레드 → SwingUtilities.invokeLater 필요
+
+**4. 에러 다이얼로그 + 로그 경로 안내**
+
+```java
+@Override
+protected void done() {
+    try {
+        FlowResult result = get();
+        // 성공 처리...
+    } catch (CancellationException e) {
+        log.logAnalysisCancelled();
+    } catch (Exception e) {
+        log.logAnalysisError(e.getCause());
+        showErrorWithLogPath("분석 중 오류: " + e.getCause().getMessage());
+    }
+}
+
+private void showErrorWithLogPath(String message) {
+    JOptionPane.showMessageDialog(this,
+        message + "\n\n로그 파일: " + log.getLogPath(),
+        "오류", JOptionPane.ERROR_MESSAGE);
+}
+```
+
+**5. 로그 설정 UI (설정 메뉴)**
+
+```
+⚙ 설정 버튼 →
+┌──────────────────────┐
+│ 로그 폴더 열기       │  ← Desktop.open()
+├──────────────────────┤
+│ 로그 크기 설정   ▶ ──┼── ○ 1MB (최대 3MB)
+│                      │   ● 5MB (최대 15MB) - 기본
+│                      │   ○ 10MB (최대 30MB)
+├──────────────────────┤
+│ 로그 파일 삭제       │  ← closeHandlers() 후 삭제
+├──────────────────────┤
+│ 설정/세션 초기화     │
+└──────────────────────┘
+```
+
+- 로그 크기 설정은 세션(session.json)에 저장되어 재시작 후 유지
+- SessionData에 `logSizeMB` 필드 추가
+
+#### GUI 테스트 중 발견된 버그 3건
+
+**버그 1: 로그 크기 설정이 앱 재시작 후 유지되지 않음**
+
+- 증상: 10MB로 변경 → 종료 → 재시작 → 5MB로 표시
+- 원인: `createSettingsPopupMenu()`가 앱 시작 시 한 번만 호출되어 라디오 버튼이 초기값으로 캐시됨
+- 해결: 팝업 메뉴를 클릭할 때마다 새로 생성
+
+```java
+// Before (캐시된 메뉴 재사용)
+JPopupMenu settingsPopup = createSettingsPopupMenu();
+settingsButton.addActionListener(e -> settingsPopup.show(...));
+
+// After (매번 새로 생성)
+settingsButton.addActionListener(e -> {
+    JPopupMenu settingsPopup = createSettingsPopupMenu();
+    settingsPopup.show(...);
+});
+```
+
+- 교훈: Swing에서 동적 상태를 반영하는 UI(라디오 버튼 등)는 캐시하면 안 됨
+
+**버그 2: SLF4J 콘솔 로그 한글 깨짐**
+
+- 증상: SessionManager의 SLF4J 로그만 깨짐, CftLogger/System.out.println은 정상
+- 원인: SLF4J/Logback은 UTF-8로 출력 → Windows 콘솔(MS949)에서 깨짐
+- 시도: logback.xml charset 설정 → 실패 (Logback 내부 동작)
+- 해결: SessionManager에서 SLF4J를 제거하고 CftLogger로 교체
+
+```java
+// Before: SLF4J (한글 깨짐)
+import org.slf4j.Logger;
+log.info("세션 로드 완료: {} ({} flows)", path, count);  // {} 플레이스홀더
+
+// After: CftLogger (정상 출력)
+import com.codeflow.util.CftLogger;
+log.info("세션 로드 완료: %s (%d flows)", path, count);  // %s 포맷
+```
+
+**주의: `error(message, throwable)` 변환 시 `%s`가 아닌 `+` 연결 필요**
+
+SLF4J에서 CftLogger로 변환할 때, `info`/`warn`은 `{}` → `%s`로 단순 치환하면 되지만, `error`는 다르다:
+
+```java
+// SLF4J: {} + 마지막 인자 Throwable 자동 처리 (SLF4J 내부 런타임 체크)
+log.error("설정 로드 실패: {}", e.getMessage(), e);
+
+// CftLogger: error(String, Throwable) → 포맷 문자열 미지원
+// ❌ 틀린 변환
+log.error("설정 로드 실패: %s", e.getMessage(), e);  // 이런 시그니처 없음
+
+// ✅ 올바른 변환
+log.error("설정 로드 실패: " + e.getMessage(), e);   // + 연결로 문자열 완성
+```
+
+**근본 원인: Java varargs 제약**
+
+`info`에는 varargs 오버로드가 있지만, `error`에서는 Throwable과 varargs를 함께 쓸 수 없다:
+```java
+// CftLogger 메서드 시그니처
+public void info(String format, Object... args)      // ✅ varargs 사용 가능
+public void error(String message, Throwable throwable) // Throwable 전용
+
+// 이런 시그니처는 Java에서 불가능 (varargs는 반드시 마지막 파라미터)
+public void error(String format, Throwable t, Object... args)  // ❌ 컴파일 에러
+public void error(String format, Object... args, Throwable t)  // ❌ 컴파일 에러
+```
+
+SLF4J는 이 제약을 우회하기 위해 `Object... args`의 마지막 인자가 Throwable인지 **런타임에 체크**하여 스택트레이스를 자동 추출한다. java.util.logging 기반인 CftLogger에는 이런 처리가 없으므로, 에러+예외 로깅 시에는 `+` 연결로 메시지를 먼저 완성해야 한다.
+
+- 교훈:
+  1. Windows에서 Java 콘솔 인코딩은 라이브러리마다 처리 방식이 다름. 한글 환경에서는 일관된 로깅 시스템 사용이 안전.
+  2. SLF4J → 다른 로거 변환 시 `{}` → `%s` 단순 치환이 아니라, 메서드 시그니처(특히 Throwable 인자)를 확인해야 한다.
+  3. Java varargs는 반드시 마지막 파라미터여야 하므로, Throwable과 가변 인자를 동시에 받는 메서드는 설계 불가.
+
+**버그 3: 로그 파일 삭제 시 사용 중인 파일 삭제 불가**
+
+- 증상: "로그 파일 삭제" → 일부만 삭제, 현재 사용 중인 `cft.log`는 남음
+- 원인: Windows에서 FileHandler가 파일을 잠금 → Files.delete() 시 AccessDeniedException
+- 해결: CftLogger에 `closeHandlers()` 메서드 추가하여 잠금 해제 후 삭제
+
+```java
+// CftLogger.java
+public void closeHandlers() {
+    for (Handler handler : logger.getHandlers()) {
+        handler.close();           // 파일 잠금 해제
+        logger.removeHandler(handler);
+    }
+    initialized = false;           // 다음 로그 호출 시 자동 재초기화
+}
+
+// ensureInitialized() 패턴으로 자동 복구
+public void info(String message) {
+    ensureInitialized();  // initialized == false이면 initialize() 호출
+    logger.info(message);
+}
+```
+
+- 삭제 흐름: `closeHandlers()` → 파일 삭제 → 다음 로그 호출 시 자동 재초기화
+- 교훈: Windows 파일 잠금은 Java에서도 적용됨. Lazy initialization 패턴으로 복구 가능.
+
+**버그 4: 로그 파일 삭제 직후 `cft.log.0` 즉시 재생성**
+
+- 증상: "로그 파일 삭제" 클릭 → "삭제되었습니다" 표시 → 로그 폴더에 `cft.log.0` + `cft.log.0.lck` 남아있음. 프로그램 종료 후에도 `cft.log.0`이 남음
+- 원인: 삭제 직후 `logger.info("로그 파일 삭제 후 로거 재시작")` 호출이 `ensureInitialized()` 트리거 → `initialize()` → 새 FileHandler 생성 → `cft.log.0` + `.lck` 즉시 재생성
+- `.lck` 파일: `java.util.logging.FileHandler`가 파일을 열 때 자동 생성하는 잠금 파일. 프로그램 종료 시 FileHandler가 닫히면서 `.lck`만 삭제됨
+
+```java
+// Before (MainFrame.java - handleClearLogs)
+logger.closeHandlers();                      // 1. 핸들러 닫기
+// ... Files.delete(file) ...               // 2. 파일 삭제 (성공)
+logger.info("로그 파일 삭제 후 로거 재시작");   // 3. ★ ensureInitialized() → 새 파일 즉시 생성!
+
+// After
+logger.closeHandlers();                      // 1. 핸들러 닫기
+// ... Files.delete(file) ...               // 2. 파일 삭제 (성공)
+// logger.info() 호출 제거 → 다음 실제 로그 이벤트까지 파일 없음
+```
+
+- 해결: 삭제 로직 이후 불필요한 `logger.info()` 호출 제거. 로거는 닫힌 상태로 유지되며, 다음 실제 로그 이벤트(분석 시작 등) 발생 시 `ensureInitialized()`로 자동 재시작
+- 교훈: Lazy initialization 패턴은 리소스 정리 직후 같은 리소스를 사용하는 코드가 있으면 즉시 재생성됨. 정리 로직 이후에는 해당 리소스를 다시 사용하는 코드가 없는지 반드시 확인해야 함
+
+#### 변경된 파일
+
+| 파일 | 변경 내용 |
+|------|----------|
+| `CftLogger.java` (신규) | 로깅 시스템 전체, closeHandlers(), ensureInitialized(), logSizeMB 설정 |
+| `SessionData.java` | logSizeMB 필드 추가 (기본 5MB) |
+| `SessionManager.java` | SLF4J → CftLogger 교체, logSizeMB 유지 로직, {} → %s 포맷 변환 |
+| `MainFrame.java` | 취소 버튼, 타임아웃, 에러 다이얼로그, 설정 메뉴(로그 폴더/크기/삭제), 팝업 메뉴 매번 생성 |
+| `logback.xml` (신규) | SLF4J를 사용하는 다른 라이브러리용 기본 설정 |
+| `CftLoggerTest.java` (신규) | 23개 단위 테스트 |
+| `SessionDataTest.java` | logSizeMB 테스트 5개 추가 |
+| `SessionManagerTest.java` | logSizeMB 저장/로드 테스트 5개 추가 |
+
+#### 기술적 결정 요약
+
+| 결정 | 선택 | 이유 |
+|------|------|------|
+| 로깅 라이브러리 | java.util.logging | 폐쇄망 환경, JDK 내장, 추가 의존성 없음 |
+| 타이머 | javax.swing.Timer | EDT에서 실행, UI 조작 안전 |
+| 취소 방식 | 버튼 토글 | 추가 버튼 없이 직관적 UX |
+| 로그 로테이션 | 설정 크기 × 3개 | 디스크 보호, 사용자 선택 가능 |
+| 설정 저장 | SessionData 통합 | 기존 JSON 세션 파일 활용, 별도 파일 불필요 |
+| 한글 깨짐 | SLF4J 제거 | logback 설정으로 해결 불가, CftLogger 통합이 근본 해결 |
+| 파일 잠금 | closeHandlers() + ensureInitialized() | 삭제 전 잠금 해제, 이후 자동 복구 |
+| 삭제 후 재생성 방지 | 삭제 직후 logger 호출 제거 | Lazy init이 즉시 재생성하는 것 방지 |
+
+#### 배운 점
+
+1. **에러 핸들링은 기능**: "에러가 없다"가 아니라 "에러를 보여주지 않는다"가 진짜 문제
+2. **Windows 파일 잠금**: FileHandler가 열고 있는 파일은 삭제 불가, 반드시 close 필요
+3. **인코딩 일관성**: 같은 앱에서 여러 로깅 시스템을 쓰면 인코딩 불일치 발생
+4. **Swing UI 캐시 주의**: 동적 상태를 반영하는 컴포넌트(라디오 버튼 등)는 매번 생성
+5. **Lazy initialization**: 리소스 해제 후 자동 복구에 유용한 패턴
+6. **Lazy initialization 부작용**: 정리 직후 같은 리소스를 사용하면 즉시 재생성됨 — 정리 로직 이후 코드 경로 점검 필수
 
 ---
 

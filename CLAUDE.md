@@ -32,6 +32,7 @@ com.codeflow/
 ├── analyzer/           # 호출 흐름 분석
 ├── output/             # 출력 (Console, Excel)
 ├── session/            # 세션 영속성 (Gson)
+├── util/               # 유틸리티 (CftLogger 등)
 └── ui/                 # Swing GUI
 ```
 
